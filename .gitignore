@@ -27,6 +27,16 @@
 *.i*86
 *.x86_64
 *.hex
+create-tftf
+create-ffff
+display-ffff
+sign-ffff
+
+# Output files
+*.tftf
+
+# Misc files
+git-commit-template
 
 # Debug files
 *.dSYM/
