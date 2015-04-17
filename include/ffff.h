@@ -59,6 +59,9 @@
 #define FFFF_SENTINEL_LENGTH          16
 #define FFFF_TIMESTAMP_LENGTH         16
 #define FFFF_FLASH_IMAGE_NAME_LENGTH  48
+#define FFFF_HDR_LENGTH               512
+#define FFFF_MAX_SECTIONS             19
+#define FFFF_PADDING                  16
 
 
 /**
@@ -119,7 +122,11 @@ struct __attribute__ ((__packed__)) ffff_hdr
     uint32_t            header_generation_number;
 
     // The element-specific part of the header.
-    struct ffff_element element_table[1];   // Start of N-element array
+    struct ffff_element element_table[FFFF_MAX_SECTIONS];
+
+    // Padding and trailing sentinel to bring it up to 512 bytes
+    uint8_t             padding[FFFF_PADDING];
+    uint8_t             sentinel[FFFF_SENTINEL_LENGTH];
 };
 
 /**
