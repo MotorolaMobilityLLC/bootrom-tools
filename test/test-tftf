@@ -1,0 +1,29 @@
+#!/bin/bash
+
+# make our scratch folder
+if [ ! -d ./build ]
+then
+    mkdir ./build
+fi
+
+echo ------------------------------------
+echo test create-tftf...
+echo ------------------------------------
+../scripts/create-tftf \
+-v \
+--code code1.txt \
+--name "twas twillig and the slithy toves did gyre and gimbal in the wabe" \
+--data data1.txt \
+--code code2.txt --offset 0x10007000 \
+--load  0x10000000 \
+--start 0x10000200 \
+--out build/foo.tftf
+
+echo
+echo ------------------------------------
+echo test display-tftf...
+echo "(The output should match the above)"
+echo ------------------------------------
+../scripts/display-tftf build/foo.tftf
+
+

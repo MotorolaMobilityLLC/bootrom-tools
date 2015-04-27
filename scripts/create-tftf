@@ -1,0 +1,288 @@
+#! /usr/bin/python
+
+#
+# Copyright (c) 2015 Google Inc.
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+# 1. Redistributions of source code must retain the above copyright notice,
+# this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+# this list of conditions and the following disclaimer in the documentation
+# and/or other materials provided with the distribution.
+# 3. Neither the name of the copyright holder nor the names of its
+# contributors may be used to endorse or promote products derived from this
+# software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+# THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+# OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+# WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+# ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+
+import sys, os, argparse, struct, shutil
+from struct import *
+from time import gmtime, strftime
+from tftf import *
+
+# Program return values
+PROGRAM_SUCCESS     = 0
+PROGRAM_WARNINGS    = 1
+PROGRAM_ERRORS      = 2
+
+# Default program name for error messages (will fill in from sys.argv[0])
+prog = "create-tftf:"
+
+# the current section being parsed. It will contain the TFTF section type and
+# file name (and optionally a copy-offset).
+current_section=[]
+
+# the list of sections (current_section is appended when done)
+sections=[]
+
+
+def flush_current_section():
+    # Flush the current section to the sections list if the current section
+    # is not empty.
+
+    global current_section
+    if current_section != None and len(current_section) > 0:
+        # flush the current section out to the list.
+        sections.append(current_section)
+        current_section= []
+
+
+def auto_int(x):
+    # Workaround to allow hex numbers to be entered for numeric arguments.
+
+    return int(x,0)
+
+
+class SectionAction(argparse.Action):
+    """argparse custom action for handling elements and subparameters"""
+
+    def __init__(self, option_strings, dest, nargs=None, **kwargs):
+        if nargs is not None:
+            raise ValueError("nargs not allowed")
+        super(SectionAction, self).__init__(option_strings, dest, **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        global current_section, sections
+        if option_string == "--offset":
+            if len(current_section) > 0:
+                # Append our offset to the current section and flush
+                # it out to the section list.
+                current_section.append(values)
+                flush_current_section();
+            else:
+                error_msg = (
+                    prog,
+                    "Error: " + option_string +
+                    " can only follow --code, --data or --manifest")
+                print prog, error_msg
+
+        else:
+            if len(current_section) > 0:
+                # flush the current section out to the list.
+                sections.append(current_section)
+                current_section= []
+
+            # handle the specific file type
+            if option_string == "--code":
+                 current_section = [TFTF_SECTION_TYPE_RAW_CODE, values]
+            elif option_string == "--data":
+                 current_section = [TFTF_SECTION_TYPE_RAW_DATA, values]
+            elif option_string == "--manifest":
+                 current_section = [TFTF_SECTION_TYPE_MANIFEST, values]
+            else:
+                print prog, "Unknown option '", option_string, "'"
+
+
+def validate_args(args, sections):
+    # Sanity-check the command line args and return a "valid" flag
+
+    success = True
+    if args.out == None:
+        print prog,  "Missing --out file!"
+        success = False
+    if len(sections) == 0:
+        print prog,  "You need at least one --code, --data or --manifest!"
+        success = False
+    if len(sections) > TFTF_MAX_SECTIONS:
+        print prog,  "Too many sections -", TFTF_MAX_SECTIONS, "max."
+        success = False
+    if args.load < 0 or args.load > 0xffffffff:
+        print prog,  "--load is out of range"
+        success = False
+    if args.start < 0 or args.start > 0xffffffff:
+        print prog,  "--start is out of range"
+        success = False
+    if args.unipro_mfg < 0 or args.unipro_mfg > 0xffffffff:
+        print prog,  "--unipro_mfg is out of range"
+        success = False
+    if args.unipro_pid < 0 or args.unipro_pid > 0xffffffff:
+        print prog,  "--unipro_pid is out of range"
+        success = False
+    if args.ara_vid < 0 or args.ara_vid > 0xffffffff:
+        print prog,  "Error: --ara_vid is out of range"
+        success = False
+    if args.ara_pid < 0 or args.ara_pid > 0xffffffff:
+        print prog,  "--ara_pid is out of range"
+        success = False
+    # TODO: Other checks TBD
+    return success
+
+
+def main():
+    """Mainline"""
+
+    global prog, current_section, sections
+    prog = sys.argv[0][sys.argv[0].rfind("/")+1:] + ":"
+    parser = argparse.ArgumentParser()
+    success = True;
+
+    # args that consume files
+    parser.add_argument("--code",
+        action = SectionAction,
+        help = "The name of an input firmware file"
+    )
+
+    parser.add_argument("--data",
+        action = SectionAction,
+        help = "The name of an input data file"
+    )
+
+    parser.add_argument("--manifest",
+        action = SectionAction,
+        help = "The name of an input manifest file"
+    )
+
+    parser.add_argument("--offset",
+        action = SectionAction,
+        type=auto_int,
+        help = "The load offset for the preceding section"
+    )
+
+    # Flags args
+    parser.add_argument("-v", "--verbose",
+        action = 'store_true',
+        help = "Dump the TFTF header when done"
+    )
+
+    #parser.add_argument("--compress",
+    #    action = 'store_true',
+    #    help = "Compress code and data sections (NOT SUPPORTED AT THIS TIME)"
+    #)
+
+
+    # String/file args
+    parser.add_argument("--name",
+        help = "The firmware package name"
+    )
+
+    parser.add_argument("--out",
+        help = "The TFTF output filename"
+    )
+
+
+    # Numeric args
+    parser.add_argument("--load",
+        type=auto_int,
+        default = 0,
+        help = "The load address for the TFTF"
+    )
+
+    parser.add_argument("--start",
+        type=auto_int,
+        default = 0,
+        help = "The TFTF start address (code entry point)"
+    )
+
+    parser.add_argument("--unipro-mfg",
+        type=auto_int,
+        default = 0,
+        help = "The UniPro manufacturer-ID"
+    )
+
+    parser.add_argument("--unipro-pid",
+        type=auto_int,
+        default = 0,
+        help = "The UniPro product-ID"
+    )
+
+
+    parser.add_argument("--ara-vid",
+        type=auto_int,
+        default = 0,
+        help = "The ARA vendor-ID"
+    )
+
+    parser.add_argument("--ara-pid",
+        type=auto_int,
+        default = 0,
+        help = "The ARA product-ID"
+    )
+
+
+    args = parser.parse_args()
+
+    # Flush any dangling section definition out to the section list.
+    flush_current_section();
+ 
+
+    # Sanity-check the arguments
+    if validate_args(args, sections) != True:
+        print prog,  "Error - invalid args"
+        sys.exit(PROGRAM_ERRORS)
+
+
+    # Populate the TFTF header from the command line args
+    tftf_header = Tftf(prog)
+    tftf_header.firmware_package_name = args.name
+    tftf_header.load_base = args.load
+    tftf_header.start_location = args.start
+    tftf_header.unipro_mfg_id = args.unipro_mfg
+    tftf_header.unipro_pid = args.unipro_pid
+    tftf_header.ara_vid = args.ara_vid
+    tftf_header.ara_pid = args.ara_pid
+    for section in sections:
+        if len(section) == 3:
+            success = tftf_header.add_section_from_file(section[0],
+                                                        section[1],
+                                                        section[2])
+        else:
+            success = tftf_header.add_section_from_file(section[0],
+                                                        section[1])
+        if success != True:
+            print prog,  "Error - too many sections"
+            sys.exit(PROGRAM_ERRORS)
+
+    # Make the TFTF header internally consistent
+    tftf_header.post_process()
+
+    # Write the TFTF file (i.e., header and section files)
+    if tftf_header.write(args.out) != True:
+        sys.exit(PROGRAM_ERRORS)
+
+    # Optionally display the header info
+    if args.verbose == True:
+        tftf_header.display(args.out)
+        tftf_header.display_data(args.out)
+
+    print "done"
+    
+ 
+    
+## Launch main
+#
+if __name__ == '__main__':
+    main()
+
