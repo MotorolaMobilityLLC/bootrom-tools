@@ -1,0 +1,14 @@
+#!/bin/bash
+./create-tftf \
+-v \
+--code display-tftf \
+--name "twas twillig and the slithy toves did gyre and gimbal in the wabe" \
+--data display-ffff \
+--code create-tftf --offset 0x10007000 \
+--load  0x10000000 \
+--start 0x10000200 \
+--out build/bar.tftf
+
+./display-tftf build/bar.tftf
+
+
