@@ -1,0 +1,235 @@
+#! /usr/bin/env python
+
+#
+# Copyright (c) 2015 Google Inc.
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+# 1. Redistributions of source code must retain the above copyright notice,
+# this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+# this list of conditions and the following disclaimer in the documentation
+# and/or other materials provided with the distribution.
+# 3. Neither the name of the copyright holder nor the names of its
+# contributors may be used to endorse or promote products derived from this
+# software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+# THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+# OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+# WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+# ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+
+from __future__ import print_function
+import sys
+import os
+import argparse
+from string import rfind
+from stat import S_ISREG
+from struct import pack_into
+from tftf import Tftf, error, TFTF_SECTION_TYPE_SIGNATURE
+import M2Crypto
+from signature_block import SignatureBlock, get_key_type, \
+    TFTF_SIGNATURE_BLOCK_SIZE, TFTF_SIGNATURE_TYPE_RSA_2048_SHA_256, \
+    TFTF_SIGNATURE_OFF_TYPE, TFTF_SIGNATURE_OFF_KEY_NAME
+
+
+# Program return values
+PROGRAM_SUCCESS = 0
+PROGRAM_WARNINGS = 1
+PROGRAM_ERRORS = 2
+
+
+def validate_args(args):
+    # Sanity-check the command line args and return a "valid" flag
+
+    if len(args.files) == 0:
+        error("Missing the TFTF file to sign")
+        return False
+    if len(args.files) > 1:
+        error("Too many TFTF files to sign")
+        return False
+
+    if not args.key:
+        error("No key file specified")
+        return False
+
+    if not args.type:
+        error("No key type specified")
+        return False
+
+    return True
+
+
+def get_key_filename(filename):
+    # Add in any missing extension to the filename
+
+    # Check for the file, and if that fails, try appending the
+    # extension.
+    names = (filename, filename + ".pem")
+    for name in names:
+        try:
+            mode = os.stat(name).st_mode
+            if S_ISREG(mode):
+                return name
+        except:
+            # stat throws an exception for missing files.
+            continue
+
+    # Can't find the file in any of its variations
+    return None
+
+
+def get_key_name(key_filename, key_type):
+    # Derive the name of the key from the key's filename
+
+    offset = rfind(key_filename, ".")
+    if offset != -1:
+        key_name = key_filename[0:offset]
+    else:
+        key_name = key_filename
+    key_name += "@" + key_type + ".projectara.com"
+    return key_name
+
+
+def get_hash_from_signature_type(tftf_signature_type):
+    # Obtain the hash type from the signature type.
+    #
+    # Returns a string, suitable for Crypto.RSA.RSA.sign, identifying
+    # the hash algorithm to use. This makes the hash usage consistent
+    # with the supplied signature type.
+
+    if tftf_signature_type == TFTF_SIGNATURE_TYPE_RSA_2048_SHA_256:
+        return "sha256"
+    else:
+        return None
+
+
+def get_signable_blob(tftf):
+    # Assemble the binary blob for signing.
+    #
+    # This consists of the first part of the TFTF header (up to the first
+    # signature descriptor), and the corresponding parts of the tftf data
+
+    index = tftf.find_first_section(TFTF_SECTION_TYPE_SIGNATURE)
+    return bytes(tftf.get_header_up_to_section(index) +
+                 tftf.get_section_data_up_to_section(index))
+
+
+def main():
+    """Mainline"""
+
+    global tftf_signature_types
+    parser = argparse.ArgumentParser()
+
+    # Flags args
+    parser.add_argument("-v", "--verbose",
+                        action='store_true',
+                        help="Display the signed TFTF header when done")
+
+    # String/file args
+    parser.add_argument("--key",
+                        help="The name of an input PEK file")
+
+    parser.add_argument("--type",
+                        help="The type of the key file")
+
+    # Remaining args
+    parser.add_argument("files",
+                        metavar='N',
+                        nargs='+',
+                        help="TFTF file to sign")
+
+    args = parser.parse_args()
+
+    # Sanity-check the arguments
+    if not validate_args(args):
+        error("Invalid args")
+        sys.exit(PROGRAM_ERRORS)
+
+    # Convert the key type string into a known key type token
+    key_type = get_key_type(args.type)
+    if key_type:
+        hash_algorithm = get_hash_from_signature_type(key_type)
+        if None == hash_algorithm:
+            error("Unknown hash algorithm")
+            sys.exit(PROGRAM_ERRORS)
+    else:
+        error("'{0:s}' is not supported".format(args.type))
+        sys.exit(PROGRAM_ERRORS)
+
+    # Read the key
+    key_filename = get_key_filename(args.key)
+    if not key_filename:
+        error("Can't find key file '{0:s}'".format(args.key))
+        sys.exit(PROGRAM_ERRORS)
+    else:
+        try:
+            key = M2Crypto.RSA.load_key(key_filename)
+        except:
+            error("Can't load key", key_filename)
+            sys.exit(PROGRAM_ERRORS)
+
+    # Create an initial signature block, sized to the fixed portion, with
+    # as much initialized as possible.  We'll use this as the base image
+    # for each of the specified TFTF files, where we'll append the signature
+    # proper, set the length and append the section to the TFTF file.
+    base_signature_block = bytearray(TFTF_SIGNATURE_BLOCK_SIZE)
+
+    signature_type = TFTF_SIGNATURE_TYPE_RSA_2048_SHA_256
+
+    # Fill in the signature block type
+    pack_into("<L", base_signature_block, TFTF_SIGNATURE_OFF_TYPE,
+              signature_type)
+
+    # Derive a key name from the key file and add it to the signature block
+    key_name = get_key_name(key_filename, args.type)
+    pack_into("<96s", base_signature_block, TFTF_SIGNATURE_OFF_KEY_NAME,
+              key_name)
+
+    # Walk the list of TFTF files
+    for f in args.files:
+        signature_block = base_signature_block
+        tftf = Tftf(f)
+
+        # Extract the signable blob from the TFTF and sign it
+        signable_blob = get_signable_blob(tftf)
+        MsgDigest = M2Crypto.EVP.MessageDigest(hash_algorithm)
+        MsgDigest.update(signable_blob)
+        signature = key.sign(MsgDigest.digest(), hash_algorithm)
+
+        # Append the signature block to the TFTF
+        signature_block = SignatureBlock(None, signature_type, key_name,
+                                         signature)
+        if not tftf.add_section(TFTF_SECTION_TYPE_SIGNATURE,
+                                signature_block.pack()):
+            sys.exit(PROGRAM_ERRORS)
+
+        tftf.post_process()
+
+        # Optionally display the header info
+        if args.verbose:
+            tftf.pack()
+            tftf.display(f)
+            tftf.display_data(f)
+
+        # Write the TFTF file (i.e., header and section files)
+        if not tftf.write(f):
+            sys.exit(PROGRAM_ERRORS)
+        tftf = None
+
+    print("Done")
+
+
+## Launch main
+#
+if __name__ == '__main__':
+    main()

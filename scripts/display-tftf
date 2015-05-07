@@ -1,4 +1,4 @@
-#! /usr/bin/python
+#! /usr/bin/env python
 
 #
 # Copyright (c) 2015 Google Inc.
@@ -30,61 +30,55 @@
 
 """This script displays a TFTF header or file(s)"""
 
-import sys, os, argparse, struct, shutil
-from struct import *
-from time import gmtime, strftime
-from tftf import *
+from __future__ import print_function
+import sys
+import argparse
+import errno
+from tftf import Tftf, error
 
 # Program return values
-PROGRAM_SUCCESS     = 0
-PROGRAM_WARNINGS    = 1
-PROGRAM_ERRORS      = 2
-
-# Default program name for error messages (will fill in from sys.argv[0])
-prog = "display-tftf"
+PROGRAM_SUCCESS = 0
+PROGRAM_WARNINGS = 1
+PROGRAM_ERRORS = 2
 
 
-## Mainline
-#
 def main():
-    """mainline"""
+    """Application for displayijg Trusted Firmware Transfer Format (TFTF) files
 
-    global prog
-    prog = sys.argv[0][sys.argv[0].rfind("/")+1:] + ":"
+    This is covered in detail in "ES3 Bridge ASIC Boot ROM High Level Design".
+
+    Usage: display-tftf {-v} <file>...
+    Where:
+        -v | --verbose
+            Display a synopsis of each TFTF section in addition to the TFTF\
+            header
+    """
+
     parser = argparse.ArgumentParser()
-    success = True;
-    
 
     # Flags args
     parser.add_argument("-v", "--verbose",
-        action = 'store_true',
-        help = "adds more detail"
-    )
+                        action='store_true',
+                        help="adds more detail")
 
     parser.add_argument("files",
-        metavar='N',
-        nargs='+',
-        help = "adds more detail"
-    )
+                        metavar='N',
+                        nargs='+',
+                        help="adds more detail")
 
     args = parser.parse_args()
 
-    if len(args.files) < 1:
-        print prog, "Missing files to display"
-        sys.exit(PROGRAM_ERRORS)
- 
+    if not args.files:
+        error("Missing files to display")
+        sys.exit(errno)
+
     # Walk the list of files
     for f in args.files:
-        tftf_header = Tftf(prog, f)
+        tftf_header = Tftf(f)
         tftf_header.display(f)
 
 
- 
-    
 ## Launch main
 #
 if __name__ == '__main__':
     main()
-
-
-
