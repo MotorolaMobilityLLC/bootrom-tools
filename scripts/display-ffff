@@ -28,12 +28,16 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
-"""This script displays a TFTF header or file(s)"""
+"""This script displays an FFFF header or file(s)"""
 
-import sys, os, argparse, struct, shutil
+import sys
+import os
+import argparse
+import struct
+import shutil
 from struct import *
 from time import gmtime, strftime
-from tftf import *
+from ffff_romimage import *
 
 # Program return values
 PROGRAM_SUCCESS     = 0
@@ -41,24 +45,31 @@ PROGRAM_WARNINGS    = 1
 PROGRAM_ERRORS      = 2
 
 # Default program name for error messages (will fill in from sys.argv[0])
-prog = "display-tftf"
+prog = "display-ffff:"
 
 
 def main():
-    """Mainline"""
+    """Application for displaying Flash Format for Firmware (FFFF) files
+
+    Usage: display-ffff {-x|--explode} file...
+    Where:
+        -x|--explode
+            A debugging aid where each element is extracted to a separate
+            file, sharing a common root name.
+       file A list of FFFF files to display
+    """
 
     global prog
     prog = sys.argv[0][sys.argv[0].rfind("/")+1:] + ":"
     parser = argparse.ArgumentParser()
-    success = True;
-    
+    prog_status = PROGRAM_SUCCESS
 
     # Flags args
-    parser.add_argument("-v", "--verbose",
-        action = 'store_true',
-        help = "adds more detail"
+    parser.add_argument("--explode", "-x",
+        help = "Saves elements in separate files with same root name"
     )
 
+    # non-keyword args
     parser.add_argument("files",
         metavar='N',
         nargs='+',
@@ -69,21 +80,26 @@ def main():
 
     if len(args.files) < 1:
         print prog, "Missing files to display"
-        sys.exit(PROGRAM_ERRORS)
- 
+        return PROGRAM_ERRORS
+
     # Walk the list of files
     for f in args.files:
-        tftf_header = Tftf(prog, f)
-        tftf_header.display(f)
-        tftf_header.display_data(f) #*****
+        ffff_romimage = FfffRomimage(prog)
+        if not ffff_romimage.init_from_file(f):
+            print prog, "There were errors"
+            prog_status = PROGRAM_ERRORS
+        else:
+            ffff_romimage.display(f)
+            if args.explode != None:
+                print "Extracting element(s):"
+                ffff_romimage.explode(args.explode)
+        ffff_romimage =  None
+
+    return prog_status
 
 
- 
-    
 ## Launch main
 #
 if __name__ == '__main__':
     main()
-
-
 

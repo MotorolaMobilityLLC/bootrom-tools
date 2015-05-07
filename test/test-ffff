@@ -1,0 +1,34 @@
+#!/bin/bash
+#
+# Simple (developer) test frame for exercising create-ffff and display-ffff
+#
+# The details of create-ffff are covered in "ES3 Bridge ASIC Boot ROM High
+# Level Design"
+#
+# Usage:
+#    test-ffff
+#
+# (To use, add/remove options to exercise different aspects of the
+# applications.)
+#
+echo " "
+echo create-ffff:
+echo -----------------------------------------
+../scripts/create-ffff \
+-v \
+--generation 1  \
+--flash-capacity 0x4A000 \
+--image-length 0xE000 \
+--erase-size 4096 \
+--name "Dogs look up to us, cats look down on us, pigs treat us as equals" \
+--s2f build/foo.tftf --eloc 0x2000 --eid 17 \
+--out build/bar.ffff
+
+echo " "
+echo ------------------------------------
+echo test display-ffff...
+echo "(The output should match the above)"
+echo ------------------------------------
+../scripts/display-ffff -x build/bob build/bar.ffff
+
+
