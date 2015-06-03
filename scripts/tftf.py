@@ -132,14 +132,12 @@ section_names = {
 def warning(*objs):
     print("WARNING: ", *objs, file=sys.stderr)
 
-
 def error(*objs):
     print("ERROR: ", *objs, file=sys.stderr)
 
 
 class TftfSection:
     """TFTF Section representation"""
-
     def __init__(self, section_type, section_length=0,
                  extended_length=0, copy_offset=0, filename=None):
         """Constructor
@@ -233,7 +231,6 @@ class TftfSection:
 
     def display_binary_data(self, blob, show_all, indent=""):
         """Display a binary blob"""
-
         # Print the data blob
         length = len(blob)
         max_on_line = 32
@@ -257,7 +254,6 @@ class TftfSection:
 
     def display_data(self, blob, title=None, indent=""):
         """Display the payload referenced by a single TFTF header"""
-
         # Print the title line
         title_string = indent
         if title:
@@ -292,7 +288,6 @@ class TftfSection:
 
 class Tftf:
     """TFTF representation"""
-
     def __init__(self, filename=None):
         # Private fields
         self.tftf_buf = bytearray(TFTF_HDR_LENGTH)
@@ -335,7 +330,6 @@ class Tftf:
         for cases where the caller needs to determine the TFTF characteristics
         before creating their buffer.
         """
-
         success = True
         if filename:
             # Try to open the file, and if that fails, try appending the
@@ -367,7 +361,6 @@ class Tftf:
 
     def load_tftf_from_buffer(self, buf):
         """Import a TFTF blob from a memory buffer"""
-
         self.tftf_buf = buf
         self.unpack()
 
@@ -417,6 +410,7 @@ class Tftf:
         # Populate the fixed part of the TFTF header.
         # (Note that we need to break up the packing because the "s" format
         # doesn't zero-pad a string shorter than the field width)
+
         pack_into("<4s16s", self.tftf_buf, 0,
                   self.sentinel,
                   self.timestamp)
@@ -523,21 +517,19 @@ class Tftf:
         # This would be called by "create-ffff" after parsing all of the
         # parameters and calling update_ffff_sections().
 
-        for comp_a in range(len(self.sections)):
+        for comp_a, section_a in enumerate(self.sections):
             collision = []
             # extract sections[comp_a]
-            section_a = self.sections[comp_a]
             if section_a.section_type == TFTF_SECTION_TYPE_SIGNATURE or \
                section_a.section_type == TFTF_SECTION_TYPE_END_OF_DESCRIPTORS:
                 break
 
             start_a = section_a.copy_offset
             end_a = start_a + section_a.expanded_length - 1
-            for comp_b in range(len(self.sections)):
+            for comp_b, section_b in enumerate(self.sections):
                 # skip checking one's self
                 if comp_a != comp_b:
                     # extract sections[comp_b]
-                    section_b = self.sections[comp_b]
                     if section_b.section_type == \
                        TFTF_SECTION_TYPE_SIGNATURE or \
                        section_b.section_type == \
@@ -580,7 +572,6 @@ class Tftf:
         Process the TFTF header (called by "create-tftf" after processing all
         arguments)
         """
-
         self.sentinel == TFTF_SENTINEL
 
         # Update the section table copy_offsets and check for collisions
@@ -598,17 +589,12 @@ class Tftf:
         # Determine the validity
         self.sniff_test()
 
-    # Create/write the TFTF file
-    #
-    #  Returns True on success, False on failure
-    #
     def write(self, out_filename):
         """Create the TFTF file and return a success flag
 
         Create the TFTF file (appending the default extension if omitted)
         and write the TFTF buffer to it.
         """
-
         success = True
         # Prepare the output buffer
         self.pack()
@@ -647,7 +633,6 @@ class Tftf:
 
     def display(self, title=None, indent=""):
         """Display a single TFTF header"""
-
         # Dump the contents of the fixed part of the TFTF header
         if title:
             print("{0:s}TFTF Header for {1:s} ({2:d} bytes)".format(
@@ -681,8 +666,7 @@ class Tftf:
         # Dump the table of section headers
         print("{0:s}  Section Table:".format(indent))
         self.sections[0].display_table_header(indent)
-        for index in range(len(self.sections)):
-            section = self.sections[index]
+        for index, section in enumerate(self.sections):
             section.display(indent, index, True)
 
             # Note any collisions on a separate line
@@ -707,7 +691,6 @@ class Tftf:
 
     def display_data(self, title=None, indent=""):
         """Display the payload referenced by a single TFTF header"""
-
         # Print the title line
         title_string = "{0:s}TFTF contents".format(indent)
         if title:
@@ -717,8 +700,7 @@ class Tftf:
 
         # Print the associated data blobs
         offset = TFTF_HDR_LENGTH
-        for index in range(len(self.sections)):
-            section = self.sections[index]
+        for index, section in enumerate(self.sections):
             if section.section_type == TFTF_SECTION_TYPE_END_OF_DESCRIPTORS:
                 break
             end = offset + section.section_length - 1
@@ -737,9 +719,7 @@ class Tftf:
         (Typically used to find the first signature section as part of the
         signing operation.)
         """
-
-        for index in range(len(self.sections)):
-            section = self.sections[index]
+        for index, section in enumerate(self.sections):
             if section.section_type == section_type or \
                section.section_type == TFTF_SECTION_TYPE_END_OF_DESCRIPTORS:
                 return index
@@ -754,7 +734,6 @@ class Tftf:
 
         (Typically used to obtain the first part of the blob to be signed.)
         """
-
         if section_index > len(self.sections):
             return None
 
@@ -773,7 +752,6 @@ class Tftf:
 
         (Typically used to obtain the second part of the blob to be signed.)
         """
-
         if section_index > len(self.sections):
             return None
 

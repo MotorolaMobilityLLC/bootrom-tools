@@ -37,28 +37,17 @@ from tftf import Tftf, TFTF_SECTION_TYPE_RAW_CODE, \
     TFTF_MAX_SECTIONS, error
 
 
-# the current section being parsed. It will contain the TFTF section type and
-# file name (and optionally a copy-offset).
-current_section = []
+# Flag to indicate that the last arg parsed was a section type, which
+# means that an optional section offset is now legal
+allow_section_offset = False
 
-# the list of sections (current_section is appended when done)
+
+# the list of sections
 sections = []
-
-
-def flush_current_section():
-    # Flush the current section to the sections list if the current section
-    # is not empty.
-
-    global current_section
-    if current_section:
-        # flush the current section out to the list.
-        sections.append(current_section)
-        current_section = []
 
 
 def auto_int(x):
     # Workaround to allow hex numbers to be entered for numeric arguments.
-
     return int(x, 0)
 
 
@@ -66,13 +55,12 @@ class SectionAction(argparse.Action):
     """argparse custom action for handling elements and subparameters"""
 
     def __call__(self, parser, namespace, values, option_string=None):
-        global current_section
+        global allow_section_offset
         if option_string == "--offset":
-            if current_section:
-                # Append our offset to the current section and flush
-                # it out to the section list.
-                current_section.append(values)
-                flush_current_section()
+            if allow_section_offset:
+                # Append our offset to the current section
+                sections[-1].append(values)
+                allow_section_offset = False
             else:
                 error_msg = (
                     "Error: " + option_string +
@@ -80,25 +68,27 @@ class SectionAction(argparse.Action):
                 print(error_msg)
 
         else:
-            if current_section:
-                # flush the current section out to the list.
-                sections.append(current_section)
-                current_section = []
+            # Close the window on section offsets
+            allow_section_offset = False
 
-            # handle the specific file type
+            # Handle the specific file type. In all cases, we stage the
+            # section in a temporary holding variable to allow the
+            # optional "--offset" to be added to it.
             if option_string == "--code":
-                current_section = [TFTF_SECTION_TYPE_RAW_CODE, values]
+                sections.append([TFTF_SECTION_TYPE_RAW_CODE, values])
+                allow_section_offset = True
             elif option_string == "--data":
-                current_section = [TFTF_SECTION_TYPE_RAW_DATA, values]
+                sections.append([TFTF_SECTION_TYPE_RAW_DATA, values])
+                allow_section_offset = True
             elif option_string == "--manifest":
-                current_section = [TFTF_SECTION_TYPE_MANIFEST, values]
+                sections.append([TFTF_SECTION_TYPE_MANIFEST, values])
+                allow_section_offset = True
             else:
                 print("Unknown option '", option_string, "'")
 
 
 def validate_args(args, sections):
     # Sanity-check the command line args and return a "valid" flag
-
     success = True
     if not args.out:
         error("Missing --out file!")
@@ -242,9 +232,6 @@ def main():
                         help="The ARA product-ID")
 
     args = parser.parse_args()
-
-    # Flush any dangling section definition out to the section list.
-    flush_current_section()
 
     # Sanity-check the arguments
     if not validate_args(args, sections):

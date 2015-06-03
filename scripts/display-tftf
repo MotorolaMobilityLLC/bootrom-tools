@@ -53,7 +53,6 @@ def main():
             Display a synopsis of each TFTF section in addition to the TFTF\
             header
     """
-
     parser = argparse.ArgumentParser()
 
     # Flags args
@@ -76,6 +75,8 @@ def main():
     for f in args.files:
         tftf_header = Tftf(f)
         tftf_header.display(f)
+        if args.verbose:
+            tftf_header.display_data(f)
 
 
 ## Launch main
