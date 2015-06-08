@@ -1,0 +1,43 @@
+#!/bin/bash
+echo ------------------------------------
+echo test sign-tftf
+echo ------------------------------------
+
+passphrase=test
+private_key_file=es3test-20150527-01.private.pem
+public_key_file=es3test-20150527-01.public.pem
+
+# Generate the private key
+if [ ! -f "$private_key_file" ]
+then
+    echo Generate private key...
+    echo "(Use '" $passphrase "' for the passphrase)"
+    openssl genrsa -aes256 -out $private_key_file 2048
+fi
+
+if [ ! -f "$public_key_file" ]
+then
+    echo Extract public key...
+    echo "(Use '" $passphrase "' for the passphrase)"
+    openssl rsa -in $private_key_file -outform PEM -pubout -out $public_key_file
+fi
+
+
+echo
+echo ------------------------------------
+echo TFTF before signing
+echo ------------------------------------
+../scripts/display-tftf build/foo.tftf
+
+
+
+echo ------------------------------------
+echo sign-tftf...
+echo "(Use '" $passphrase "' for the passphrase)"
+../scripts/sign-tftf \
+  -v \
+  --key $private_key_file \
+  --type rsa2048-sha256 \
+  build/foo.tftf
+
+

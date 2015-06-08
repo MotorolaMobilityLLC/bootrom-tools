@@ -35,6 +35,7 @@ import binascii
 from struct import pack_into, unpack_from
 from string import rfind
 from time import gmtime, strftime
+from util import display_binary_data
 
 # TFTF section types
 TFTF_SECTION_TYPE_RESERVED = 0x00
@@ -229,31 +230,9 @@ class TftfSection:
                               self.section_name(self.section_type))
         print(section_string)
 
-    def display_binary_data(self, blob, show_all, indent=""):
-        """Display a binary blob"""
-        # Print the data blob
-        length = len(blob)
-        max_on_line = 32
-
-        if length <= (3 * max_on_line) or show_all:
-            for start in range(0, length, max_on_line):
-                num_bytes = min(length, max_on_line)
-                foo = binascii.hexlify(blob[start:start+num_bytes])
-                print("{0:s}{1:s}".format(indent, foo))
-        else:
-            # Blob too long, so print the first and last lines with a ":"
-            # spacer between
-            print("{0:s}{1:s}".format(
-                indent,
-                binascii.hexlify(blob[0:max_on_line])))
-            print("{0:s}  :".format(indent))
-            start = length - max_on_line
-            print("{0:s}{1:s}".format(
-                indent,
-                binascii.hexlify(blob[start:length])))
-
     def display_data(self, blob, title=None, indent=""):
         """Display the payload referenced by a single TFTF header"""
+
         # Print the title line
         title_string = indent
         if title:
@@ -278,11 +257,11 @@ class TftfSection:
             print("{0:s}      {1:s}".format(indent,
                                             binascii.hexlify(key_hash)))
             print("{0:s}    Signature:".format(indent))
-            self.display_binary_data(blob[TFTF_SIGNATURE_OFF_KEY_SIGNATURE:],
-                                     True, indent + "        ")
+            display_binary_data(blob[TFTF_SIGNATURE_OFF_KEY_SIGNATURE:],
+                                True, indent + "        ")
         else:
             # The default is to show the blob as a binary dump.
-            self.display_binary_data(blob, False, indent + "  ")
+            display_binary_data(blob, False, indent + "  ")
         print("")
 
 
@@ -410,7 +389,6 @@ class Tftf:
         # Populate the fixed part of the TFTF header.
         # (Note that we need to break up the packing because the "s" format
         # doesn't zero-pad a string shorter than the field width)
-
         pack_into("<4s16s", self.tftf_buf, 0,
                   self.sentinel,
                   self.timestamp)
@@ -633,7 +611,7 @@ class Tftf:
 
     def display(self, title=None, indent=""):
         """Display a single TFTF header"""
-        # Dump the contents of the fixed part of the TFTF header
+        # 1. Dump the contents of the fixed part of the TFTF header
         if title:
             print("{0:s}TFTF Header for {1:s} ({2:d} bytes)".format(
                 indent, title, self.tftf_length))
@@ -663,7 +641,7 @@ class Tftf:
         print("{0:s}  Ara product ID:    0x{1:08x}".format(
             indent, self.ara_pid))
 
-        # Dump the table of section headers
+        # 2. Dump the table of section headers
         print("{0:s}  Section Table:".format(indent))
         self.sections[0].display_table_header(indent)
         for index, section in enumerate(self.sections):
@@ -691,14 +669,14 @@ class Tftf:
 
     def display_data(self, title=None, indent=""):
         """Display the payload referenced by a single TFTF header"""
-        # Print the title line
+        # 1. Print the title line
         title_string = "{0:s}TFTF contents".format(indent)
         if title:
             title_string += " for {0:s}".format(title)
         title_string += " ({0:d} bytes)".format(self.tftf_length)
         print(title_string)
 
-        # Print the associated data blobs
+        # 2. Print the associated data blobs
         offset = TFTF_HDR_LENGTH
         for index, section in enumerate(self.sections):
             if section.section_type == TFTF_SECTION_TYPE_END_OF_DESCRIPTORS:
