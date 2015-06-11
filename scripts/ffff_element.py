@@ -101,6 +101,7 @@ class FfffElement:
     Each element describes a region of flash memory, its type and the
     corresponding blob stored there (typically a TFTF "file").
     """
+
     def __init__(self, index, buf, buf_size, erase_block_size,
                  element_type, element_id, element_generation,
                  element_location, element_length, filename=None):

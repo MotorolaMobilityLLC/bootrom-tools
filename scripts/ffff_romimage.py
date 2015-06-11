@@ -37,7 +37,6 @@ from ffff_element import FFFF_MAX_HEADER_BLOCK_OFFSET, FFFF_SENTINEL, \
 from ffff import Ffff
 from util import error, is_power_of_2
 
-
 # FFFF ROMimage representation
 #
 class FfffRomimage:

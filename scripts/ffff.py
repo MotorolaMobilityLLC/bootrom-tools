@@ -57,6 +57,7 @@ class Ffff:
     The overall FFFF ROMimage contains 2 headers, one in each of the first
     2 erasable blocks (see: ffff_romimage.py).
     """
+
     def __init__(self, buf, offset, flash_image_name, flash_capacity,
                  erase_block_size, image_length, header_generation_number):
         """FFFF constructor"""
