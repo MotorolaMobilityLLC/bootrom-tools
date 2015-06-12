@@ -30,8 +30,7 @@
 
 from __future__ import print_function
 from struct import pack_into, unpack_from
-from util import display_binary_data
-from tftf import error
+from util import display_binary_data, error
 
 # TFTF Signature Block layout
 TFTF_SIGNATURE_KEY_NAME_LENGTH = 96

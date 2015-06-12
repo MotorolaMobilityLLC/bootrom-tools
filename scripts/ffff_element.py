@@ -28,110 +28,80 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
-import sys
-import os
-import argparse
-import struct
-import shutil
-from struct import *
-from time import gmtime, strftime
-from tftf import *
+from __future__ import print_function
+from struct import unpack_from, pack_into
+from tftf import Tftf
+from util import error, block_aligned
 
 
 # TFTF Sentinel value.
-FFFF_SENTINEL     = "FlashFormatForFW"
-
+FFFF_SENTINEL = "FlashFormatForFW"
 
 # FFFF header & field sizes
-FFFF_SENTINEL_LENGTH_IN_BYTES     = 16
-FFFF_TIMESTAMP_LENGTH             = 16
-FFFF_FLASH_IMAGE_NAME_LENGTH      = 48
-FFFF_HDR_LENGTH                   = 512
-FFFF_MAX_ELEMENTS                 = 19
-FFFF_PADDING                      = 16
+FFFF_SENTINEL_LENGTH_IN_BYTES = 16
+FFFF_TIMESTAMP_LENGTH = 16
+FFFF_FLASH_IMAGE_NAME_LENGTH = 48
+FFFF_HDR_LENGTH = 512
+FFFF_MAX_ELEMENTS = 19
+FFFF_PADDING = 16
 
 # Maximum possible size for a header block
-FFFF_MAX_HEADER_BLOCK_SIZE        = (64 * 1024)
-FFFF_MAX_HEADER_BLOCK_OFFSET      = (512 * 1024)
+FFFF_MAX_HEADER_BLOCK_SIZE = (64 * 1024)
+FFFF_MAX_HEADER_BLOCK_OFFSET = (512 * 1024)
 
 # Special element index denoting header (for collisions)
-FFFF_HEADER_COLLISION             = -1
+FFFF_HEADER_COLLISION = -1
 
 # FFFF Element types (see: ffff_element.element_type)
-FFFF_ELEMENT_END_OF_ELEMENT_TABLE     = 0x00
-FFFF_ELEMENT_STAGE2_FIRMWARE_PACKAGE  = 0x01
-FFFF_ELEMENT_STAGE3_FIRMWARE_PACKAGE  = 0x02
-FFFF_ELEMENT_IMS_CERTIFICATE          = 0x03
-FFFF_ELEMENT_CMS_CERTIFICATE          = 0x04
-FFFF_ELEMENT_DATA                     = 0x05
-
+FFFF_ELEMENT_END_OF_ELEMENT_TABLE = 0x00
+FFFF_ELEMENT_STAGE2_FIRMWARE_PACKAGE = 0x01
+FFFF_ELEMENT_STAGE3_FIRMWARE_PACKAGE = 0x02
+FFFF_ELEMENT_IMS_CERTIFICATE = 0x03
+FFFF_ELEMENT_CMS_CERTIFICATE = 0x04
+FFFF_ELEMENT_DATA = 0x05
 
 # FFFF signature block field sizes
-FFFF_SIGNATURE_KEY_NAME_LENGTH  = 64
-FFFF_SIGNATURE_KEY_HASH_LENGTH  = 32
-
+FFFF_SIGNATURE_KEY_NAME_LENGTH = 64
+FFFF_SIGNATURE_KEY_HASH_LENGTH = 32
 
 # FFFF element offsets
-FFFF_ELT_OFF_TYPE       = 0x00
-FFFF_ELT_OFF_ID         = 0x04
+FFFF_ELT_OFF_TYPE = 0x00
+FFFF_ELT_OFF_ID = 0x04
 FFFF_ELT_OFF_GENERATION = 0x08
-FFFF_ELT_OFF_LOCATION   = 0x0c
-FFFF_ELT_OFF_LENGTH     = 0x10
-FFFF_ELT_LENGTH         = 0x14
-
+FFFF_ELT_OFF_LOCATION = 0x0c
+FFFF_ELT_OFF_LENGTH = 0x10
+FFFF_ELT_LENGTH = 0x14
 
 # FFFF header offsets
-FFFF_HDR_OFF_SENTINEL              = 0x0000
-FFFF_HDR_OFF_TIMESTAMP             = 0x0010
-FFFF_HDR_OFF_FLASH_IMAGE_NAME      = 0x0020
-FFFF_HDR_OFF_FLASH_CAPACITY        = 0x0050
-FFFF_HDR_OFF_ERASE_BLOCK_SIZE      = 0x0054
-FFFF_HDR_OFF_HDR_BLOCK_SIZE        = 0x0058
-FFFF_HDR_OFF_FLASH_IMAGE_LENGTH    = 0x005c
+FFFF_HDR_OFF_SENTINEL = 0x0000
+FFFF_HDR_OFF_TIMESTAMP = 0x0010
+FFFF_HDR_OFF_FLASH_IMAGE_NAME = 0x0020
+FFFF_HDR_OFF_FLASH_CAPACITY = 0x0050
+FFFF_HDR_OFF_ERASE_BLOCK_SIZE = 0x0054
+FFFF_HDR_OFF_HDR_BLOCK_SIZE = 0x0058
+FFFF_HDR_OFF_FLASH_IMAGE_LENGTH = 0x005c
 FFFF_HDR_OFF_HEADER_GENERATION_NUM = 0x0060
-FFFF_HDR_OFF_ELEMENT_TBL           = 0x0064  # Start of elements array
-FFFF_HDR_OFF_PADDING               = 0x01e0  # 12-byte padding
-FFFF_HDR_OFF_TAIL_SENTINEL         = 0x01f0
+FFFF_HDR_OFF_ELEMENT_TBL = 0x0064  # Start of elements array
+FFFF_HDR_OFF_PADDING = 0x01e0  # 12-byte padding
+FFFF_HDR_OFF_TAIL_SENTINEL = 0x01f0
 
-FFFF_FILE_EXTENSION      = ".ffff"
+FFFF_FILE_EXTENSION = ".ffff"
 
 # TFTF validity assesments
-FFFF_HDR_VALID           = 0
-FFFF_HDR_ERASED          = 1
-FFFF_HDR_INVALID         = 2
-
-
-
-def is_power_of_2(x):
-    # Determine if a number is a power of 2
-    return ((x != 0) and not(x & (x - 1)))
-
-
-def block_aligned(location, block_size):
-    # Determine if a location is block-aligned
-    return (location & (block_size - 1)) == 0
-
-
-def next_boundary(location, block_size):
-    # Round up to the next block
-    return (location + (block_size - 1)) & ~(block_size - 1)
-
-
-def is_constant_fill(bytes, fill_byte):
-    # Check a range of bytes for a constant fill
-    return all(b == fill_byte for b in bytes)
+FFFF_HDR_VALID = 0
+FFFF_HDR_ERASED = 1
+FFFF_HDR_INVALID = 2
 
 
 # FFFF Element representation
 #
 class FfffElement:
-   """Defines the contents of a Flash Format for Firmware (FFFF) element table
+    """Defines the contents of a Flash Format for Firmware (FFFF) element table
 
-   Each element describes a region of flash memory, its type and the
-   corresponding blob stored there (typically a TFTF "file").
-   """
-
-    def __init__(self, prog, index, buf, buf_size, erase_block_size,
+    Each element describes a region of flash memory, its type and the
+    corresponding blob stored there (typically a TFTF "file").
+    """
+    def __init__(self, index, buf, buf_size, erase_block_size,
                  element_type, element_id, element_generation,
                  element_location, element_length, filename=None):
         """Constructor
@@ -143,10 +113,9 @@ class FfffElement:
         # Private vars
         self.filename = filename
         self.tftf_blob = None
-        self.prog = prog
         self.buf = buf
         self.buf_size = buf_size
-        self.index = index;
+        self.index = index
         self.erase_block_size = erase_block_size
         self.collisions = []
         self.duplicates = []
@@ -161,7 +130,6 @@ class FfffElement:
         self.element_location = element_location
         self.element_length = element_length
 
-
     def init(self):
         """FFFF Element post-constructor initializer
 
@@ -169,24 +137,21 @@ class FfffElement:
         that of the file.  Returns a success flag if the file was loaded
         (no file is treated as success).
         """
-
         success = True
         # Try to size it from the TFTF file
-        if self.filename != None and \
-           self.tftf_blob == None:
+        if self.filename and not self.tftf_blob:
             # Create a TFTF blob and load the contents from the specified
             # TFTF file
-            self.tftf_blob = Tftf(self.prog, self.filename)
+            self.tftf_blob = Tftf(self.filename)
             success = self.tftf_blob.load_tftf_file(self.filename)
             if success and self.tftf_blob.is_good():
                 # element_length must be that of the entire TFTF blob,
                 # not just the TFTF's "load_length" or "expanded_length".
                 self.element_length = self.tftf_blob.tftf_length
             else:
-                print self.prog, "Bad TFTF file:", self.filename
+                error("Bad TFTF file:", self.filename)
                 success = False
         return success
-
 
     def unpack(self, buf, offset):
         """Unpack an element header from an FFFF header buffer
@@ -195,7 +160,6 @@ class FfffElement:
         offset.  Returns a flag indicating if the unpacked element is an
         end-of-table marker
         """
-
         element_hdr = unpack_from("<LLLLL", buf, offset)
         self.element_type = element_hdr[0]
         self.element_id = element_hdr[1]
@@ -209,7 +173,7 @@ class FfffElement:
             # TFTF file
             span_start = self.element_location
             span_end = span_start + self.element_length
-            self.tftf_blob = Tftf(self.prog, None)
+            self.tftf_blob = Tftf(None)
             span_start = self.element_location
             span_end = span_start + self.element_length
             self.tftf_blob.load_tftf_from_buffer(buf[span_start:span_end])
@@ -217,22 +181,19 @@ class FfffElement:
         else:
             return True
 
-
     def pack(self, buf, offset):
         """Pack an element header into an FFFF header
 
         Packs an element header into into the FFFF header buffer at the
         specified offset and returns the offset for the next element
         """
-
         pack_into("<LLLLL", buf, offset,
-        self.element_type,
-        self.element_id,
-        self.element_generation,
-        self.element_location,
-        self.element_length)
+                  self.element_type,
+                  self.element_id,
+                  self.element_generation,
+                  self.element_location,
+                  self.element_length)
         return offset + FFFF_ELT_LENGTH
-
 
     def validate(self, address_range_low, address_range_high):
         # Validate an element header
@@ -241,16 +202,15 @@ class FfffElement:
 
         # Do we overlap the header
         self.in_range = self.element_location >= address_range_low and\
-                        self.element_location < address_range_high
+            self.element_location < address_range_high
 
         # check for alignment and type
         self.aligned = block_aligned(self.element_location,
                                      self.erase_block_size)
         self.valid_type = self.element_type >= \
-                              FFFF_ELEMENT_END_OF_ELEMENT_TABLE and \
-                          self.element_type <= FFFF_ELEMENT_DATA
+            FFFF_ELEMENT_END_OF_ELEMENT_TABLE and \
+            self.element_type <= FFFF_ELEMENT_DATA
         return self.in_range and self.aligned and self.valid_type
-
 
     def validate_against(self, other):
         # Validate an element header against another element header
@@ -272,16 +232,14 @@ class FfffElement:
            self.element_generation == other.element_generation:
             self.duplicates += [other.index]
 
-
     def same_as(self, other):
         """Determine if this TFTF is identical to another"""
 
         return self.element_type == other.element_type and \
-               self.element_id == other.element_id and \
-               self.element_generation == other.element_generation and \
-               self.element_location == other.element_location and \
-               self.element_length == other.element_length
-
+            self.element_id == other.element_id and \
+            self.element_generation == other.element_generation and \
+            self.element_location == other.element_location and \
+            self.element_length == other.element_length
 
     def write(self, filename):
         """Write an element to a file
@@ -293,15 +251,14 @@ class FfffElement:
         try:
             # Output the entire FFFF element blob (less padding)
             with open(filename, 'wb') as wf:
-                wf.write(self.buf[self.element_location:\
-                                  self.element_location + \
-                                      self.element_length])
-                print self.prog, "Wrote", filename
+                wf.write(self.buf[self.element_location:
+                                  self.element_location +
+                                  self.element_length])
+                print("Wrote", filename)
                 return True
         except:
-            print self.prog, "Failed to write", filename
+            error("Failed to write", filename)
             return False
-
 
     def element_name(self, element_type):
         # Convert an element type into textual form
@@ -322,11 +279,9 @@ class FfffElement:
             name = "?"
         return name
 
-
     def display_table_header(self):
         # Print the element table column names
-        print "     Type       ID         Generation Location   Length"
-
+        print("     Type       ID         Generation Location   Length")
 
     def display(self, expand_type):
         """Print an element header
@@ -334,7 +289,6 @@ class FfffElement:
         Print an element header in numeric form, optionally expanding
         the element type into a textual form
         """
-
         # Print the element data
         element_string = "  {0:2d}".format(self.index)
         element_string += " 0x{0:08x}".format(self.element_type)
@@ -344,21 +298,21 @@ class FfffElement:
         element_string += " 0x{0:08x}".format(self.element_length)
         if expand_type:
             element_string += \
-               " ({0:s})".format(self.element_name(self.element_type))
-        print element_string
+                " ({0:s})".format(self.element_name(self.element_type))
+        print(element_string)
 
         # Note any collisions and duplicates on separate lines
         if len(self.collisions) > 0:
             element_string = "           Collides with element(s):"
-            for collision in self.collisions[index]:
+            for collision in self.collisions[self.index]:
                 element_string += " {0:d}".format(collision)
-            print element_string
+            print(element_string)
 
         if len(self.duplicates) > 0:
             element_string = "           Duplicates element(s):"
-            for duplicate in self.duplicates[index]:
+            for duplicate in self.duplicates[self.index]:
                 element_string += " {0:d}".format(duplicate)
-            print element_string
+            print(element_string)
 
         # Note any other errors
         element_string = ""
@@ -369,8 +323,7 @@ class FfffElement:
         if not self.valid_type:
             element_string += "Invalid-type "
         if len(element_string) > 0:
-            print"           Errors:", element_string
-
+            error(element_string)
 
     def display_element_data(self, header_index):
         """Print the data blob associated with this element
@@ -380,4 +333,3 @@ class FfffElement:
 
         self.tftf_blob.display("element [{0:d}]".format(self.index), "  ")
         self.tftf_blob.display_data("element [{0:d}]".format(self.index), "  ")
-

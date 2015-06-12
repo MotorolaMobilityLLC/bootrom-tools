@@ -30,22 +30,16 @@
 
 """This script displays an FFFF header or file(s)"""
 
+from __future__ import print_function
 import sys
-import os
 import argparse
-import struct
-import shutil
-from struct import *
-from time import gmtime, strftime
-from ffff_romimage import *
+from ffff_romimage import FfffRomimage
+from util import error
 
 # Program return values
-PROGRAM_SUCCESS     = 0
-PROGRAM_WARNINGS    = 1
-PROGRAM_ERRORS      = 2
-
-# Default program name for error messages (will fill in from sys.argv[0])
-prog = "display-ffff:"
+PROGRAM_SUCCESS = 0
+PROGRAM_WARNINGS = 1
+PROGRAM_ERRORS = 2
 
 
 def main():
@@ -58,48 +52,42 @@ def main():
             file, sharing a common root name.
        file A list of FFFF files to display
     """
-
-    global prog
-    prog = sys.argv[0][sys.argv[0].rfind("/")+1:] + ":"
     parser = argparse.ArgumentParser()
     prog_status = PROGRAM_SUCCESS
 
     # Flags args
     parser.add_argument("--explode", "-x",
-        help = "Saves elements in separate files with same root name"
-    )
+                        help="Saves elements in separate files "
+                             "with same root name")
 
     # non-keyword args
     parser.add_argument("files",
-        metavar='N',
-        nargs='+',
-        help = "adds more detail"
-    )
+                        metavar='N',
+                        nargs='+',
+                        help="adds more detail")
 
     args = parser.parse_args()
 
     if len(args.files) < 1:
-        print prog, "Missing files to display"
+        error("Missing files to display")
         return PROGRAM_ERRORS
 
     # Walk the list of files
     for f in args.files:
-        ffff_romimage = FfffRomimage(prog)
+        ffff_romimage = FfffRomimage()
         if not ffff_romimage.init_from_file(f):
-            print prog, "There were errors"
+            print("There were errors", file=sys.stderr)
             prog_status = PROGRAM_ERRORS
         else:
             ffff_romimage.display(f)
-            if args.explode != None:
-                print "Extracting element(s):"
+            if args.explode:
+                print("Extracting element(s) from FFFF file:")
                 ffff_romimage.explode(args.explode)
-        ffff_romimage =  None
+        ffff_romimage = None
 
     return prog_status
-
 
 ## Launch main
 #
 if __name__ == '__main__':
     main()
-

@@ -28,7 +28,14 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
-from ffff import *
+from __future__ import print_function
+from string import rfind
+from struct import unpack_from
+from ffff_element import FFFF_MAX_HEADER_BLOCK_OFFSET, FFFF_SENTINEL, \
+    FFFF_MAX_HEADER_BLOCK_SIZE, FFFF_HDR_OFF_TAIL_SENTINEL, \
+    FFFF_FILE_EXTENSION, FFFF_HDR_LENGTH, FFFF_HDR_VALID
+from ffff import Ffff
+from util import error, is_power_of_2
 
 
 # FFFF ROMimage representation
@@ -37,15 +44,13 @@ class FfffRomimage:
 
     # FFFF constructor
     #
-    def __init__(self, prog):
+    def __init__(self):
         """FFFF ROMimage constructor
 
         The FFFF representation contains a buffer of the ROM span covered by
         the image.
         """
-
         # FFFF header fields
-        self.prog = prog
         self.ffff0 = None
         self.ffff1 = None
         self.ffff_buf = None
@@ -58,7 +63,6 @@ class FfffRomimage:
         self.element_location_min = 0
         self.element_location_max = 0
 
-
     def init(self, flash_image_name, flash_capacity, erase_block_size,
              image_length, header_generation_number):
         """"FFFF post-constructor initializer for a new FFFF
@@ -68,14 +72,12 @@ class FfffRomimage:
         The FFFF ROMimage buffer is sized explicitly from the image_length
         parameter.
         """
-
         # Validate the parameters
         if not is_power_of_2(erase_block_size):
-            print self.prog, "Error: Erase block size must be 2**n"
+            error("Erase block size must be 2**n")
             return False
         elif (image_length % erase_block_size) != 0:
-            print self.prog, "Error: Image length must be" \
-                             " a multiple of erase bock size"
+            error("Image length must be a multiple of erase bock size")
             return False
 
         self.flash_image_name = flash_image_name
@@ -93,15 +95,14 @@ class FfffRomimage:
         #self.mv = memoryview(self.ffff_buf)
 
         # Create the 2 FFFF headers
-        self.ffff0 = Ffff(self.prog, self.ffff_buf, 0, flash_image_name,
+        self.ffff0 = Ffff(self.ffff_buf, 0, flash_image_name,
                           flash_capacity, erase_block_size,
                           image_length, header_generation_number)
-        self.ffff1 = Ffff(self.prog, self.ffff_buf, self.header_block_size(),
+        self.ffff1 = Ffff(self.ffff_buf, self.header_block_size(),
                           flash_image_name, flash_capacity,
                           erase_block_size, image_length,
                           header_generation_number)
-        return True;
-
+        return True
 
     def init_from_file(self, filename):
         """"FFFF post-constructor initializer to read an FFFF from file
@@ -110,9 +111,8 @@ class FfffRomimage:
         and parses it, returning a success flag. The FFFF ROMimage buffer
         is sized to the supplied file.
         """
-
         success = True
-        if filename != None:
+        if filename:
             # Try to open the file, and if that fails, try appending the
             # extension.
             names = (filename, filename + FFFF_FILE_EXTENSION)
@@ -124,8 +124,8 @@ class FfffRomimage:
                 except:
                     rf = None
 
-            if rf == None:
-                print self.prog, "Error: can't find FFFF file", filename
+            if not rf:
+                error(" can't find FFFF file", filename)
                 return False
 
             try:
@@ -140,14 +140,16 @@ class FfffRomimage:
                 rf.close()
 
                 if not self.get_romimage_characteristics():
-                    print self.prog, "Error: invalid file"
+                    error("invalid file")
                     return False
 
                 # Create the 1st FFFF header/object
                 #self.mv = memoryview(self.ffff_buf)
-                self.ffff0 = Ffff(self.prog, self.ffff_buf, 0,
-                                  self.flash_image_name, self.flash_capacity,
-                                  self.erase_block_size, self.flash_image_length,
+                self.ffff0 = Ffff(self.ffff_buf, 0,
+                                  self.flash_image_name,
+                                  self.flash_capacity,
+                                  self.erase_block_size,
+                                  self.flash_image_length,
                                   self.header_generation_number)
                 self.ffff0.unpack()
 
@@ -156,45 +158,42 @@ class FfffRomimage:
                 while offset < FFFF_MAX_HEADER_BLOCK_OFFSET:
                     # Unpack and validate the nose and tail sentinels
                     ffff_hdr = unpack_from("<16s", self.ffff_buf,
-                                                offset)
+                                           offset)
                     nose_sentinel = ffff_hdr[0]
                     ffff_hdr = unpack_from("<16s", self.ffff_buf,
-                                                offset + \
-                                                FFFF_HDR_OFF_TAIL_SENTINEL)
+                                           offset +
+                                           FFFF_HDR_OFF_TAIL_SENTINEL)
                     tail_sentinel = ffff_hdr[0]
 
                     # Create the 2nd FFFF header/object?
                     if nose_sentinel == FFFF_SENTINEL and \
                             tail_sentinel == FFFF_SENTINEL:
                         self.header_block_size = offset
-                        self.ffff1 = Ffff(self.prog, self.ffff_buf, offset,
+                        self.ffff1 = Ffff(self.ffff_buf, offset,
                                           self.flash_image_name,
                                           self.flash_capacity,
                                           self.erase_block_size,
                                           self.flash_image_length,
                                           self.header_generation_number)
                         self.ffff1.unpack()
-                        break;
+                        break
                     else:
                         offset <<= 1
             except:
-                print self.prog, "Error: can't read", filename
-                success = False;
+                error("can't read", filename)
+                success = False
         else:
-            print self.prog, "Error: no file specified"
-            success = False;
+            error("no file specified")
+            success = False
 
         return success
-
 
     def header_block_size(self):
         # Determine the size of the FFFF header block, defined as a
         # power-of-2 * the erase-block-size
-
         for size in range(self.erase_block_size, FFFF_MAX_HEADER_BLOCK_SIZE):
             if size > FFFF_HDR_LENGTH:
-                return size;
-
+                return size
 
     def get_romimage_characteristics(self):
         # Extract the ROMimage size and characteritics from the first FFFF
@@ -219,46 +218,41 @@ class FfffRomimage:
         # Verify the sentinels
         if sentinel != FFFF_SENTINEL or \
                 tail_sentinel != FFFF_SENTINEL:
-            print self.prog, "Error: invalid sentinel"
+            error("invalid sentinel")
             return False
-
 
         # Validate the block size and image length
         if not is_power_of_2(self.erase_block_size):
-            print self.prog, "Error: Erase block size must be 2**n"
+            error("Erase block size must be 2**n")
             return False
         elif (self.flash_image_length % self.erase_block_size) != 0:
-            print self.prog, "Error: Image length must be" \
-                             " a multiple of erase bock size"
+            error("Image length must be a multiple of erase bock size")
             return False
-
 
         # Determine the ROM range that can hold the elements
         self.element_location_min = 2 * self.header_block_size()
         self.element_location_max = self.flash_capacity
         return True
 
-
     def add_element(self, element_type, element_id, element_generation,
-                   element_location, element_length, filename):
+                    element_location, element_length, filename):
         # Add a new element to the element table but don't load the
         # TFTF file into the ROMimage buffer.  This is called for FFFF
         # creation, and adds the element to both FFFF headers.  It returns
         # a success flag
-
-        if self.ffff0 != None and self.ffff1 != None:
-            return self.ffff0.add_element(element_type, element_id,
-                                          element_generation,
-                                          element_location, element_length,
-                                          filename) and \
-                   self.ffff1.add_element(element_type, element_id,
-                                          element_generation,
-                                          element_location, element_length,
-                                          filename)
+        if self.ffff0 and self.ffff1:
+            return \
+                self.ffff0.add_element(element_type, element_id,
+                                       element_generation,
+                                       element_location, element_length,
+                                       filename) and \
+                self.ffff1.add_element(element_type, element_id,
+                                       element_generation,
+                                       element_location, element_length,
+                                       filename)
         else:
-            print self.prog, "Error: No FFFF in which to add element"
+            error("No FFFF in which to add element")
             return False
-
 
     def post_process(self):
         """Post-process the FFFF header
@@ -266,24 +260,21 @@ class FfffRomimage:
         Reads the TFTF files into the ROMimage buffer for both FFFF headers.
         (Called by "create-ffff" after processing all arguments)
         """
-
-        if self.ffff0 != None and self.ffff1 != None:
+        if self.ffff0 and self.ffff1:
             self.ffff0.post_process(self.mv)
             self.ffff1.post_process(self.mv)
         else:
-            print self.prog, "Error: No FFFF to post-process"
-
+            error("No FFFF to post-process")
 
     def display(self, header_index, filename=None):
         """Display an FFFF header"""
 
-        if self.ffff0 != None and self.ffff1 != None:
+        if self.ffff0 and self.ffff1:
             identical = self.ffff0.same_as(self.ffff1)
             self.ffff0.display(0, not identical, identical, filename)
             self.ffff1.display(1, True, identical, filename)
         else:
-            print self.prog, "Error: No FFFF to display"
-
+            error("No FFFF to display")
 
     def write(self, out_filename):
         """Create the FFFF file
@@ -291,13 +282,11 @@ class FfffRomimage:
         Create the FFFF file, write the FFFF ROMimage buffer to it and return
         a success flag.  Appends the default FFFF file extension if omitted
         """
-
         # Reject the write if we didn't pass the sniff test
         if self.ffff0.header_validity != FFFF_HDR_VALID or \
            self.ffff1.header_validity != FFFF_HDR_VALID:
-            print self.prog, "Error: invalid FFFF header:"
-            return False;
-
+            error("invalid FFFF header:")
+            return False
 
         # Ensure the output file ends in the default file extension if
         # the user hasn't specified their own extension.
@@ -308,12 +297,11 @@ class FfffRomimage:
             # Output the entire FFFF blob
             with open(out_filename, 'wb') as wf:
                 wf.write(self.ffff_buf)
-                print self.prog, "Wrote", out_filename
+                print("Wrote", out_filename)
                 return True
         except:
-            print self.prog, "Failed to write", out_filename
+            error("Failed to write", out_filename)
             return False
-
 
     def explode(self, root_filename=None):
         """Write out the component elements
@@ -322,11 +310,10 @@ class FfffRomimage:
         a success flag.  Appends the default FFFF file extension if omitted
         """
 
-        if root_filename == None:
+        if not root_filename:
             root_filename = "ffff"
         if self.ffff0.same_as(self.ffff1):
             self.ffff0.write_elements(root_filename)
         else:
             self.ffff0.write_elements(root_filename + "_0")
             self.ffff1.write_elements(root_filename + "_1")
-

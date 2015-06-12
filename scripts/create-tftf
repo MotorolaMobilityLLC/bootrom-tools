@@ -34,7 +34,8 @@ import argparse
 import errno
 from tftf import Tftf, TFTF_SECTION_TYPE_RAW_CODE, \
     TFTF_SECTION_TYPE_RAW_DATA, TFTF_SECTION_TYPE_MANIFEST, \
-    TFTF_MAX_SECTIONS, error
+    TFTF_MAX_SECTIONS
+from util import error
 
 
 # Flag to indicate that the last arg parsed was a section type, which
@@ -62,11 +63,8 @@ class SectionAction(argparse.Action):
                 sections[-1].append(values)
                 allow_section_offset = False
             else:
-                error_msg = (
-                    "Error: " + option_string +
-                    " can only follow --code, --data or --manifest")
-                print(error_msg)
-
+                error(option_string,
+                      "can only follow --code, --data or --manifest")
         else:
             # Close the window on section offsets
             allow_section_offset = False

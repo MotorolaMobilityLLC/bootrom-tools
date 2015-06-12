@@ -28,51 +28,48 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
+from __future__ import print_function
 import sys
-import os
 import argparse
-import struct
-import shutil
-from struct import *
-from time import gmtime, strftime
-from ffff_romimage import *
+from ffff_romimage import FfffRomimage
+from ffff_element import FFFF_ELEMENT_STAGE2_FIRMWARE_PACKAGE, \
+    FFFF_ELEMENT_STAGE3_FIRMWARE_PACKAGE, FFFF_ELEMENT_IMS_CERTIFICATE, \
+    FFFF_ELEMENT_CMS_CERTIFICATE, FFFF_ELEMENT_DATA, FFFF_MAX_ELEMENTS
+
+from util import error
 
 # Program return values
-PROGRAM_SUCCESS     = 0
-PROGRAM_WARNINGS    = 1
-PROGRAM_ERRORS      = 2
-
-# Default program name for error messages (will fill in from sys.argv[0])
-prog = "create-ffff:"
+PROGRAM_SUCCESS = 0
+PROGRAM_WARNINGS = 1
+PROGRAM_ERRORS = 2
 
 # The current element being parsed.
 # Element layout: [type, filename, ID, gen, loc, len].
-current_element=[]
+current_element = []
 INDEX_CE_TYPE = 0
 INDEX_CE_FILE = 1
-INDEX_CE_EID  = 2
+INDEX_CE_EID = 2
 INDEX_CE_EGEN = 3
 INDEX_CE_ELOC = 4
 INDEX_CE_ELEN = 5
 
 # Parameter-checking constants
 # TODO: update these with more plausible values
-FLASH_MIN_SIZE       = 32*1024
+FLASH_MIN_SIZE = 32*1024
 FLASH_MIN_BLOCK_SIZE = 512
-FLASH_SANITY_MASK    = 0x07ff
+FLASH_SANITY_MASK = 0x07ff
 
 
 # The list of element descriptions, assembled by the parser (current_element
 # is appended when done)
-elements=[]
+elements = []
 
 
 def flush_current_element():
     # Flush the current element to the elements list if the current element is
     # not empty
-
     global current_element
-    if (current_element != None) and (len(current_element) > 0):
+    if current_element:
         # flush the current element out to the list.
         elements.append(current_element)
         current_element = []
@@ -80,8 +77,7 @@ def flush_current_element():
 
 def auto_int(x):
     # Workaround to allow hex numbers to be entered for numeric arguments.
-
-    return int(x,0)
+    return int(x, 0)
 
 
 class ElementAction(argparse.Action):
@@ -111,35 +107,30 @@ class ElementAction(argparse.Action):
                 else:
                     current_element[INDEX_CE_ELEN] = values
             else:
-                error_msg = (
-                    prog,
-                    "Error: " + option_string +
-                    " can only follow an element")
-                print prog, error_msg
-
+                error("Error: ", option_string, " can only follow an element")
         else:
             if len(current_element) > 0:
                 # flush the current element out to the list.
                 elements.append(current_element)
-                current_element= []
+                current_element = []
 
             # Handle the specific element type
             if option_string == "--s2f":
-                 current_element = [FFFF_ELEMENT_STAGE2_FIRMWARE_PACKAGE,
-                                    values, 0, 0, 0, 0]
+                current_element = [FFFF_ELEMENT_STAGE2_FIRMWARE_PACKAGE,
+                                   values, 0, 0, 0, 0]
             elif option_string == "--s3f":
-                 current_element = [FFFF_ELEMENT_STAGE3_FIRMWARE_PACKAGE,
-                                    values, 0, 0, 0, 0]
+                current_element = [FFFF_ELEMENT_STAGE3_FIRMWARE_PACKAGE,
+                                   values, 0, 0, 0, 0]
             elif option_string == "--ims":
-                 current_element = [FFFF_ELEMENT_IMS_CERTIFICATE, values,
-                                    0, 0, 0, 0]
+                current_element = [FFFF_ELEMENT_IMS_CERTIFICATE, values,
+                                   0, 0, 0, 0]
             elif option_string == "--cms":
-                 current_element = [FFFF_ELEMENT_CMS_CERTIFICATE, values,
-                                    0, 0, 0, 0]
+                current_element = [FFFF_ELEMENT_CMS_CERTIFICATE, values,
+                                   0, 0, 0, 0]
             elif option_string == "--data":
-                 current_element = [FFFF_ELEMENT_DATA, values, 0, 0, 0, 0]
+                current_element = [FFFF_ELEMENT_DATA, values, 0, 0, 0, 0]
             else:
-                print prog, "Unknown option '", option_string, "'"
+                error("Unknown option '", option_string, "'")
 
 
 def validate_block_arg(success, name, size, min_size):
@@ -147,40 +138,38 @@ def validate_block_arg(success, name, size, min_size):
     # plausible" flag. Note that it uses the input "success" as a starting
     # point and invalidates if the block arg doesn' pass muster. This allows
     # one to chain calls to validate_block_arg.
-
     if size == 0:
         # is value big enough?
-        print prog, name, "is missing"
+        error(name, "is missing")
         success = False
     elif size < min_size:
         # is value big enough?
-        print prog, name, "is too small"
+        error(name, "is too small")
         success = False
     elif size < 0 or size > 0xffffffff:
         # will value fit in a 32-bit number?
-        print prog, name, "is out of range"
+        error(name, "is out of range")
         success = False
     elif 0 != size & FLASH_SANITY_MASK:
         # is value some multiple of 2**n?
-        print prog, name, "is suspect"
+        error(name, "is suspect")
         success = False
     return success
 
 
 def validate_args(args, elements):
     # Sanity-check the command line args and return a "valid" flag
-
     success = True
-    if args.out == None:
-        print prog,  "Missing --out file!"
+    if not args.out:
+        error("Missing --out file!")
         success = False
 
     if len(elements) == 0:
-        print prog,  "You need at least one element!"
+        error("You need at least one element!")
         success = False
 
     if len(elements) > FFFF_MAX_ELEMENTS:
-        print prog,  "Too many elements -", FFFF_MAX_ELEMENTS, "max."
+        error("Too many elements -", FFFF_MAX_ELEMENTS, "max.")
         success = False
 
     success = validate_block_arg(success,
@@ -194,18 +183,18 @@ def validate_args(args, elements):
                                  FLASH_MIN_BLOCK_SIZE)
 
     if args.image_length == 0:
-        print prog,  "Error: you must specify --image-length"
+        error("you must specify --image-length")
         success = False
     elif args.image_length < 0 or args.image_length > 0xffffffff:
-        print prog,  "--image-length is out of range"
+        error("--image-length is out of range")
         success = False
 
     if args.generation == 0:
-        print prog,  "Error: you must specify --generation"
+        error("you must specify --generation")
         success = False
     elif args.generation < 1 or args.generation > 0xffffffff:
-        print prog,  "Error: --generation {0:d} is out of range".\
-              format(args.generation)
+        error("--generation {0:d} is out of range".
+              format(args.generation))
         success = False
 
     # TODO: Other checks TBD
@@ -261,123 +250,99 @@ def main():
                 (Optional) The element's length. If ommitted, the length is
                 extracted from the file.
     """
-
-    global prog, current_element, elements
-    prog = sys.argv[0][sys.argv[0].rfind("/")+1:] + ":"
+    global current_element, elements
     parser = argparse.ArgumentParser()
-    success = True;
 
     # args that consume files
     parser.add_argument("--s2f", "--stage-2-fw",
-        action = ElementAction,
-        help = "The name of a Stage 2 Firmware file"
-    )
+                        action=ElementAction,
+                        help="The name of a Stage 2 Firmware file")
 
     parser.add_argument("--s3f", "--stage-3-fw",
-        action = ElementAction,
-        help = "The name of a Stage 3 Firmware file"
-    )
+                        action=ElementAction,
+                        help="The name of a Stage 3 Firmware file")
 
     parser.add_argument("--ims",
-        action = ElementAction,
-        help = "The name of an IMS certificate file"
-    )
+                        action=ElementAction,
+                        help="The name of an IMS certificate file")
 
     parser.add_argument("--cms",
-        action = ElementAction,
-        help = "The name of an input CMS certificate file"
-    )
+                        action=ElementAction,
+                        help="The name of an input CMS certificate file")
 
     parser.add_argument("--data",
-        action = ElementAction,
-        help = "The name of a data file"
-    )
+                        action=ElementAction,
+                        help="The name of a data file")
 
     # subarguments to the above
     parser.add_argument("--eid", "--element-id",
-        action = ElementAction,
-        type=auto_int,
-        help = "The ID number of the preceding element"
-    )
+                        action=ElementAction,
+                        type=auto_int,
+                        help="The ID number of the preceding element")
 
     parser.add_argument("--egen", "--element-generation",
-        action = ElementAction,
-        type=auto_int,
-        help = "The generation number of the preceding element"
-    )
+                        action=ElementAction,
+                        type=auto_int,
+                        help="The generation number of the preceding element")
 
     parser.add_argument("--eloc", "--element-location",
-        action = ElementAction,
-        type=auto_int,
-        help = "The location of the preceding element"
-    )
+                        action=ElementAction,
+                        type=auto_int,
+                        help="The location of the preceding element")
 
     parser.add_argument("--elen", "--element-length",
-        action = ElementAction,
-        type=auto_int,
-        help = "The length of the preceding element"
-    )
+                        action=ElementAction,
+                        type=auto_int,
+                        help="The length of the preceding element")
 
     # Flags args
     parser.add_argument("-v", "--verbose",
-        action = 'store_true',
-        help = "Dump the FFFFS header when done"
-    )
+                        action='store_true',
+                        help="Dump the FFFFS header when done")
 
     # String/file args
     parser.add_argument("--name",
-        help = "The firmware package name"
-    )
+                        help="The firmware package name")
 
     parser.add_argument("--out",
-        help = "The TFTF output filename"
-    )
-
+                        help="The TFTF output filename")
 
     # Numeric args
     parser.add_argument("--flash-capacity", "--fc",
-        type=auto_int,
-        default = 0,
-        help = "The capacity of the Flash drive (in bytes)"
-    )
+                        type=auto_int,
+                        default=0,
+                        help="The capacity of the Flash drive (in bytes)")
 
     parser.add_argument("--erase-size", "--ebs",
-        type=auto_int,
-        default = 0,
-        help = "The erase block granularity (in bytes)"
-    )
+                        type=auto_int,
+                        default=0,
+                        help="The erase block granularity (in bytes)")
 
     parser.add_argument("--image-length", "--length",
-        type=auto_int,
-        default = 0,
-        help = "The size of the image (in bytes)"
-    )
+                        type=auto_int,
+                        default=0,
+                        help="The size of the image (in bytes)")
 
     parser.add_argument("--generation", "--gen",
-        type=auto_int,
-        default = 0,
-        help = "The header generation number"
-    )
-
+                        type=auto_int,
+                        default=0,
+                        help="The header generation number")
 
     args = parser.parse_args()
 
     # Flush any dangling element definition out to the element list.
     flush_current_element()
 
-
     # Sanity-check the arguments
     if not validate_args(args, elements):
-        print prog,  "Error - invalid args"
+        error("invalid args")
         sys.exit(PROGRAM_ERRORS)
 
-
     # Populate the FFFF header from the command line args
-    ffff_romimage = FfffRomimage(prog)
+    ffff_romimage = FfffRomimage()
     if not ffff_romimage.init(args.name, args.flash_capacity,
                               args.erase_size, args.image_length,
                               args.generation):
-        print prog, "There were errors"
         sys.exit(PROGRAM_ERRORS)
 
     # Add in all of the elements
@@ -388,29 +353,27 @@ def main():
                                          element[INDEX_CE_ELOC],
                                          element[INDEX_CE_ELEN],
                                          element[INDEX_CE_FILE]):
-            print prog,  "Error - unable to add", element[INDEX_CE_FILE]
+            error("unable to add", element[INDEX_CE_FILE])
             sys.exit(PROGRAM_ERRORS)
-
 
     # Make the FFFF header internally consistent
     ffff_romimage.post_process()
 
     # Write the FFFF file (i.e., header and element files
     if not ffff_romimage.write(args.out):
-        print prog, "There were errors:"
+        error("There were errors:")
         ffff_romimage.display(args.out)
-        print prog, "There were errors"
+        error("There were errors")
         sys.exit(PROGRAM_ERRORS)
 
     # Optionally display the header info
     if args.verbose:
         ffff_romimage.display(args.out)
 
-    print "done"
+    print("done")
 
 
 ## Launch main
 #
 if __name__ == '__main__':
     main()
-

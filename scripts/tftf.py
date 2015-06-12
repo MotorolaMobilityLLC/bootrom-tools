@@ -29,13 +29,12 @@
 #
 
 from __future__ import print_function
-import sys
 import os
 import binascii
 from struct import pack_into, unpack_from
 from string import rfind
 from time import gmtime, strftime
-from util import display_binary_data
+from util import display_binary_data, error
 
 # TFTF section types
 TFTF_SECTION_TYPE_RESERVED = 0x00
@@ -130,13 +129,6 @@ section_names = {
 }
 
 
-def warning(*objs):
-    print("WARNING: ", *objs, file=sys.stderr)
-
-def error(*objs):
-    print("ERROR: ", *objs, file=sys.stderr)
-
-
 class TftfSection:
     """TFTF Section representation"""
     def __init__(self, section_type, section_length=0,
@@ -163,7 +155,7 @@ class TftfSection:
                 self.section_length = statinfo.st_size
                 self.expanded_length = statinfo.st_size
             except:
-                error("file" + filename + " is invalid or missing")
+                error("file", filename, " is invalid or missing")
 
     def unpack(self, section_buf, section_offset):
         # Unpack a section header from a TFTF header buffer, and return
@@ -232,7 +224,6 @@ class TftfSection:
 
     def display_data(self, blob, title=None, indent=""):
         """Display the payload referenced by a single TFTF header"""
-
         # Print the title line
         title_string = indent
         if title:
@@ -345,7 +336,6 @@ class Tftf:
 
     def unpack(self):
         # Unpack a TFTF header from a buffer
-
         tftf_hdr = unpack_from("<4s16s48sLLLLLLLL", self.tftf_buf)
         self.sentinel = tftf_hdr[0]
         self.timestamp = tftf_hdr[1]
@@ -375,10 +365,9 @@ class Tftf:
                    TFTF_SECTION_TYPE_END_OF_DESCRIPTORS:
                     break
             else:
-                str = "Invalid section type {0:02x} "\
+                error("Invalid section type {0:02x} "
                       "at [{1:d}]".format(section.section_type,
-                                          section_index)
-                error(str)
+                                          section_index))
                 break
         self.sniff_test()
 
@@ -456,7 +445,7 @@ class Tftf:
                 return self.add_section(section_type, section_data,
                                         copy_offset)
             except:
-                error("Unable to read" + filename)
+                error("Unable to read", filename)
                 return False
         else:
             error("Section table full")
@@ -595,18 +584,18 @@ class Tftf:
             try:
                 statinfo = os.stat(out_filename)
                 if statinfo.st_size != self.tftf_length:
-                    error(out_filename + "has wrong length")
+                    error(out_filename, "has wrong length")
             except:
-                error("Can't get info on" + out_filename)
+                error("Can't get info on", out_filename)
 
         except:
-            error("Unable to write" + out_filename)
+            error("Unable to write", out_filename)
             success = False
         else:
             if success:
-                print("Wrote" + out_filename)
+                print("Wrote", out_filename)
             else:
-                error("Failed to write" + out_filename)
+                error("Failed to write", out_filename)
             return success
 
     def display(self, title=None, indent=""):
@@ -736,7 +725,6 @@ class Tftf:
         # Flush any changes out to the buffer and return the substring
         self.pack()
         slice_end = TFTF_HDR_LENGTH
-        for index in range(section_index):
-            section = self.sections[index]
+        for index, section in enumerate(self.sections):
             slice_end += section.section_length
         return self.tftf_buf[TFTF_HDR_LENGTH:slice_end]

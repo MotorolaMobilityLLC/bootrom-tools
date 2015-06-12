@@ -29,27 +29,37 @@
 #
 
 from __future__ import print_function
-#import sys
+import sys
 import binascii
 
 
+def warning(*objs):
+    """Print a warning message to stderr"""
+    print("WARNING: ", *objs, file=sys.stderr)
+
+
+def error(*objs):
+    """Print an error message to stderr"""
+    print("ERROR: ", *objs, file=sys.stderr)
+
+
 def is_power_of_2(x):
-    # Determine if a number is a power of 2
+    """Determine if a number is a power of 2"""
     return ((x != 0) and not(x & (x - 1)))
 
 
 def block_aligned(location, block_size):
-    # Determine if a location is block-aligned
+    """Determine if a location is block-aligned"""
     return (location & (block_size - 1)) == 0
 
 
 def next_boundary(location, block_size):
-    # Round up to the next block
+    """Round up to the next block"""
     return (location + (block_size - 1)) & ~(block_size - 1)
 
 
 def is_constant_fill(bytes, fill_byte):
-    # Check a range of bytes for a constant fill
+    """Check a range of bytes for a constant fill"""
     return all(b == fill_byte for b in bytes)
 
 
@@ -61,7 +71,6 @@ def display_binary_data(blob, show_all, indent=""):
     are displayed, and if the blob is more than 96 bytes long, only the
     first and last 32 bytes are displayed, with a ":" between them.
     """
-
     # Print the data blob
     length = len(blob)
     max_on_line = 32

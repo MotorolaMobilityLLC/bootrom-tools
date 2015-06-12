@@ -28,27 +28,38 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
-from ffff_element import *
+from __future__ import print_function
+from time import gmtime, strftime
+from struct import unpack_from, pack_into
+from ffff_element import FFFF_HDR_LENGTH, FFFF_HDR_VALID, \
+    FFFF_MAX_HEADER_BLOCK_SIZE, FFFF_HDR_OFF_TAIL_SENTINEL, \
+    FFFF_HDR_OFF_ELEMENT_TBL, FFFF_MAX_ELEMENTS, FfffElement, \
+    FFFF_ELT_LENGTH, FFFF_HDR_OFF_FLASH_IMAGE_NAME, \
+    FFFF_HDR_OFF_FLASH_CAPACITY, FFFF_FLASH_IMAGE_NAME_LENGTH, \
+    FFFF_ELEMENT_END_OF_ELEMENT_TABLE, FFFF_HEADER_COLLISION, \
+    FFFF_HDR_ERASED, FFFF_SENTINEL, \
+    FFFF_HDR_INVALID
+
+
+from util import error, is_power_of_2, next_boundary, is_constant_fill
 
 
 # FFFF representation
 #
 class Ffff:
-   """Defines the contents of a Flash Format for Firmware (FFFF) header
+    """Defines the contents of a Flash Format for Firmware (FFFF) header
 
-   Each FFFF header contains general information about the Flash chip,
-   the range of it consumed by the FFFF, and a table of Elements (see:
-   ffff_element.py) which describe the purpose and layout of each
-   populated blob.
+    Each FFFF header contains general information about the Flash chip,
+    the range of it consumed by the FFFF, and a table of Elements (see:
+    ffff_element.py) which describe the purpose and layout of each
+    populated blob.
 
-   The overall FFFF ROMimage contains 2 headers, one in each of the first
-   2 erasable blocks (see: ffff_romimage.py).
-   """
-
-    def __init__(self, prog, buf, offset, flash_image_name, flash_capacity,
+    The overall FFFF ROMimage contains 2 headers, one in each of the first
+    2 erasable blocks (see: ffff_romimage.py).
+    """
+    def __init__(self, buf, offset, flash_image_name, flash_capacity,
                  erase_block_size, image_length, header_generation_number):
         """FFFF constructor"""
-
         # FFFF header fields
         self.sentinel = ""
         self.timestamp = ""
@@ -62,9 +73,7 @@ class Ffff:
         self.padding = ""
         self.tail_sentinel = ""
 
-
         # Private vars
-        self.prog = prog
         self.ffff_buf = buf
         self.header_offset = offset
         self.collisions = []
@@ -76,7 +85,6 @@ class Ffff:
         self.element_location_min = 2 * self.header_block_size()
         self.element_location_max = image_length
 
-
     def header_block_size(self):
         # Determine the size of the FFFF header block
         #
@@ -84,8 +92,7 @@ class Ffff:
 
         for size in range(self.erase_block_size, FFFF_MAX_HEADER_BLOCK_SIZE):
             if size > FFFF_HDR_LENGTH:
-                return size;
-
+                return size
 
     def unpack(self):
         """Unpack an FFFF header from a buffer"""
@@ -114,8 +121,7 @@ class Ffff:
         self.elements = []
         offset = FFFF_HDR_OFF_ELEMENT_TBL
         for index in range(FFFF_MAX_ELEMENTS):
-            element = FfffElement(self.prog,
-                                  index,
+            element = FfffElement(index,
                                   self.ffff_buf,
                                   self.flash_capacity,
                                   self.erase_block_size,
@@ -125,10 +131,9 @@ class Ffff:
                 offset += FFFF_ELT_LENGTH
             else:
                 # Stop on the first unused element
-                print "unpack done"
-                break;
+                print("unpack done")
+                break
         self.validate_ffff_header()
-
 
     def pack(self):
         # Pack the FFFF header members into a FFFF header buffer, prior
@@ -140,7 +145,7 @@ class Ffff:
         timestamp = strftime("%Y%m%d %H%M%S", gmtime())
         pack_into("<16s16s", self.ffff_buf, self.header_offset,
                   self.sentinel, timestamp)
-        if self.flash_image_name != None:
+        if self.flash_image_name:
             pack_into("<48s", self.ffff_buf,
                       self.header_offset + FFFF_HDR_OFF_FLASH_IMAGE_NAME,
                       self.flash_image_name)
@@ -160,9 +165,8 @@ class Ffff:
         for element in self.elements:
             offset = element.pack(self.ffff_buf, offset)
 
-
     def add_element(self, element_type, element_id, element_generation,
-                   element_location, element_length, filename):
+                    element_location, element_length, filename):
         """Add a new element to the element table
 
         Adds an element to the element table but doesn't load the TFTF
@@ -172,10 +176,8 @@ class Ffff:
         (We would typically be called by "create-ffff" after parsing element
         parameters.)
         """
-
         if len(self.elements) < FFFF_MAX_ELEMENTS:
-            element = FfffElement(self.prog,
-                                  len(self.elements),
+            element = FfffElement(len(self.elements),
                                   self.ffff_buf,
                                   self.flash_capacity,
                                   self.erase_block_size,
@@ -188,7 +190,6 @@ class Ffff:
             if element.init():
                 self.elements.append(element)
 
-
                 span_start = element.element_location
                 span_end = span_start + len(element.tftf_blob.tftf_buf)
                 self.ffff_buf[span_start:span_end] = element.tftf_blob.tftf_buf
@@ -196,11 +197,8 @@ class Ffff:
             else:
                 return False
         else:
-            print self.prog, "Error: too many elements"
+            error("too many elements")
             return False
-
-
-
 
     def validate_element_table(self):
         # Check for element validity, inter-element collisions and
@@ -215,11 +213,10 @@ class Ffff:
         self.duplicates_found = False
         self.invalid_elements_found = False
 
-        for i in range(len(self.elements)):
+        for i, elt_a in enumerate(self.elements):
             collision = []
             duplicate = []
 
-            elt_a = self.elements[i]
             if elt_a.element_type == FFFF_ELEMENT_END_OF_ELEMENT_TABLE:
                 break
 
@@ -232,11 +229,10 @@ class Ffff:
                 self.collisions_found = True
                 collision += [FFFF_HEADER_COLLISION]
 
-            for j in range(len(self.elements)):
+            for j, elt_b in enumerate(self.elements):
                 # skip checking one's self
                 if i != j:
                     # extract elements[j]
-                    elt_b = self.elements[j]
                     if elt_b.element_type == \
                             FFFF_ELEMENT_END_OF_ELEMENT_TABLE:
                         break
@@ -259,16 +255,15 @@ class Ffff:
                     if elt_a.element_type == elt_b.element_type and \
                        elt_a.element_id == elt_b.element_id and \
                        elt_a.element_generation == \
-                           elt_b.element_generation:
+                       elt_b.element_generation:
                         self.duplicatess_found = True
                         duplicate += [j]
 
             self.collisions += [collision]
             self.duplicates += [duplicate]
         return not self.collisions_found and \
-               not self.duplicates_found and \
-               not self.invalid_elements_found
-
+            not self.duplicates_found and \
+            not self.invalid_elements_found
 
     def validate_ffff_header(self):
         # Perform a quick validity check of the header.  Generally done when
@@ -278,49 +273,44 @@ class Ffff:
 
         # Check for erased header
 
-        span = self.ffff_buf[self.header_offset:\
+        span = self.ffff_buf[self.header_offset:
                              self.header_offset+FFFF_HDR_LENGTH]
-        if is_constant_fill(span,0) or \
+        if is_constant_fill(span, 0) or \
            is_constant_fill(span, 0xff):
             self.header_validity = FFFF_HDR_ERASED
             return self.header_validity
 
-
         # Valid sentinels?
         if self.sentinel != FFFF_SENTINEL or \
                 self.tail_sentinel != FFFF_SENTINEL:
-            print self.prog, "Error: Invalid sentinel"
+            error("Invalid sentinel")
             self.header_validity = FFFF_HDR_INVALID
             return self.header_validity
 
         # Verify sizes
         if not is_power_of_2(self.erase_block_size):
-            print self.prog, "Error: Erase block size must be 2**n"
+            error("Erase block size must be 2**n")
             self.header_validity = FFFF_HDR_INVALID
             return self.header_validity
         elif (self.flash_image_length % self.erase_block_size) != 0:
-            print self.prog, \
-                  "Error: Image length is not a multiple of erase bock size"
+            error("Image length is not a multiple of erase bock size")
             self.header_validity = FFFF_HDR_INVALID
             return self.header_validity
-
 
         # Verify that the unused portions of the header are zeroed, per spec.
         span_start = self.header_offset + FFFF_HDR_OFF_ELEMENT_TBL + \
-                     len(self.elements) * FFFF_ELT_LENGTH
+            len(self.elements) * FFFF_ELT_LENGTH
         span_end = self.header_offset + FFFF_HDR_OFF_TAIL_SENTINEL - \
-                     span_start
-        if not is_constant_fill(self.ffff_buf[span_start:span_end],0):
+            span_start
+        if not is_constant_fill(self.ffff_buf[span_start:span_end], 0):
             self.header_validity = FFFF_HDR_INVALID
             return self.header_validity
-
 
         # check for elemental problems
         if not self.validate_element_table():
             self.header_validity = FFFF_HDR_INVALID
 
         return self.header_validity
-
 
     def post_process(self, buf):
         """Post-process the FFFF header
@@ -331,7 +321,6 @@ class Ffff:
 
         (Called by "create-ffff" after processing all arguments)
         """
-
         # Revalidate the erase block size
         self.erase_block_mask = self.erase_block_size - 1
 
@@ -341,16 +330,14 @@ class Ffff:
         for element in self.elements:
             if element.element_location == 0:
                 element.element_location = location
-                print self.prog, \
-                      "Note: Assuming element [{0:d}]" \
-                      " loads at {1:08x}".format(element.index, location)
-            location = next_boundary(element.element_location + \
+                error("Note: Assuming element [{0:d}]"
+                      " loads at {1:08x}".format(element.index, location))
+            location = next_boundary(element.element_location +
                                      element.element_length,
                                      self.erase_block_size)
 
         if self.flash_image_length == 0:
             self.flash_image_length = location
-
 
         self.validate_element_table()
 
@@ -358,7 +345,7 @@ class Ffff:
         self.sentinel = FFFF_SENTINEL
 
         self.timestamp = strftime("%Y%m%d %H%M%S", gmtime())
-        if self.flash_image_name != None:
+        if self.flash_image_name:
             self.flash_image_name = \
                 self.flash_image_name[0:FFFF_FLASH_IMAGE_NAME_LENGTH]
         self.tail_sentinel = FFFF_SENTINEL
@@ -368,10 +355,8 @@ class Ffff:
         self.pack()
         self.validate_ffff_header()
 
-
     def same_as(self, other):
         """Determine if this FFFF is identical to another"""
-
         # Compare the element tables
         elements_match = len(self.elements) == len(other.elements)
         if elements_match:
@@ -381,40 +366,35 @@ class Ffff:
 
         # If the element tables matched, compare the rest of the header
         return elements_match and \
-               self.sentinel == other.sentinel and \
-               self.timestamp == other.timestamp and \
-               self.flash_image_name == other.flash_image_name and \
-               self.flash_capacity == other.flash_capacity and \
-               self.erase_block_size == other.erase_block_size and \
-               self.header_size == other.header_size and \
-               self.flash_image_length == other.flash_image_length and \
-               self.header_generation_number == \
-                   other.header_generation_number and \
-               self.padding == other.padding and \
-               self.tail_sentinel == other.tail_sentinel
-
+            self.sentinel == other.sentinel and \
+            self.timestamp == other.timestamp and \
+            self.flash_image_name == other.flash_image_name and \
+            self.flash_capacity == other.flash_capacity and \
+            self.erase_block_size == other.erase_block_size and \
+            self.header_size == other.header_size and \
+            self.flash_image_length == other.flash_image_length and \
+            self.header_generation_number == \
+            other.header_generation_number and \
+            self.padding == other.padding and \
+            self.tail_sentinel == other.tail_sentinel
 
     def write_elements(self, header):
         """Write all the elements to separate files
 
         (This is intended to support ffff-display's --explode option)
         """
-
-        for index in range(len(self.elements)):
-            element = self.elements[index]
+        for index, element in enumerate(self.elements):
             filename = "{0:s}_element_{1:d}".format(header, index)
             element.write(filename)
             if element.element_type == FFFF_ELEMENT_END_OF_ELEMENT_TABLE:
                 break
 
-
     def display_element_table(self):
         # Display the FFFF header's element table in human-readable form
 
-        print "  Element Table:"
+        print("  Element Table:")
         self.elements[0].display_table_header()
-        for index in range(len(self.elements)):
-            element = self.elements[index]
+        for index, element in enumerate(self.elements):
             element.display(True)
             if element.element_type == FFFF_ELEMENT_END_OF_ELEMENT_TABLE:
                 break
@@ -422,60 +402,56 @@ class Ffff:
         # Note any unused elements
         num_unused_elements = FFFF_MAX_ELEMENTS - len(self.elements)
         if num_unused_elements > 1:
-            print "  {0:2d} (unused)".format(len(self.elements))
-            print "   :    :"
+            print("  {0:2d} (unused)".format(len(self.elements)))
+            print("   :    :")
         if num_unused_elements > 0:
-            print "  {0:2d} (unused)".format(FFFF_MAX_ELEMENTS-1)
-
+            print("  {0:2d} (unused)".format(FFFF_MAX_ELEMENTS-1))
 
     def display_element_data(self, header_index):
         # Display the element data (TFTFs) from the element table
-
-        if header_index != None:
-            print "Elements for FFFF Header[{0:d}]:".\
-              format(header_index)
+        if header_index:
+            print("Elements for FFFF Header[{0:d}]:".
+                  format(header_index))
         else:
-            print "Elements for both FFFF headers:"
+            print("Elements for both FFFF headers:")
 
         for element in self.elements:
             element.display_element_data(header_index)
             if element.element_type == FFFF_ELEMENT_END_OF_ELEMENT_TABLE:
                 break
 
-
     def display(self, header_index, display_element_data,
-                use_common_header, filename = None):
+                use_common_header, filename=None):
         """Display an FFFF header"""
-
         # Dump the contents of the fixed part of the TFTF header
-        if filename != None:
-            print "FFFF Header[{0:d}] for: {1:s}".\
-              format(header_index, filename)
+        if filename:
+            print("FFFF Header[{0:d}] for: {1:s}".
+                  format(header_index, filename))
         else:
-            print "FFFF Header[{0:d}]:".format(header_index)
-        print "  Sentinel:             '{0:16s}'".\
-              format(self.sentinel)
-        print "  Timestamp:            '{0:16s}'".\
-              format(self.timestamp)
-        print "  Flash image name:     '{0:48s}'".\
-              format(self.flash_image_name)
-        print "  Flash capacity:       0x{0:08x}".\
-              format(self.flash_capacity)
-        print "  Erase block size:     0x{0:08x}".\
-              format(self.erase_block_size)
-        print "  Header size:          0x{0:08x}".\
-              format(self.header_size)
-        print "  Flash image_length:   0x{0:08x}".\
-              format(self.flash_image_length)
-        print "  Header generation:    0x{0:08x} ({0:d})".\
-              format(self.header_generation_number)
+            print("FFFF Header[{0:d}]:".format(header_index))
+        print("  Sentinel:             '{0:16s}'".
+              format(self.sentinel))
+        print("  Timestamp:            '{0:16s}'".
+              format(self.timestamp))
+        print("  Flash image name:     '{0:48s}'".
+              format(self.flash_image_name))
+        print("  Flash capacity:       0x{0:08x}".
+              format(self.flash_capacity))
+        print("  Erase block size:     0x{0:08x}".
+              format(self.erase_block_size))
+        print("  Header size:          0x{0:08x}".
+              format(self.header_size))
+        print("  Flash image_length:   0x{0:08x}".
+              format(self.flash_image_length))
+        print("  Header generation:    0x{0:08x} ({0:d})".
+              format(self.header_generation_number))
 
         # Dump the element table
         self.display_element_table()
 
         # Bring up the rear
-        print "  Sentinel:             '{0:16s}'".format(self.tail_sentinel)
-        print " "
+        print("  Sentinel:             '{0:16s}'".format(self.tail_sentinel))
+        print(" ")
 
         # Dump the element table's TFTF information
         if display_element_data:
@@ -483,5 +459,4 @@ class Ffff:
                 self.display_element_data(None)
             else:
                 self.display_element_data(header_index)
-        print " "
-
+        print(" ")

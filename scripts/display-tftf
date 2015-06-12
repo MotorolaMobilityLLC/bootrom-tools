@@ -34,7 +34,8 @@ from __future__ import print_function
 import sys
 import argparse
 import errno
-from tftf import Tftf, error
+from tftf import Tftf
+from util import error
 
 # Program return values
 PROGRAM_SUCCESS = 0
