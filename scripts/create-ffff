@@ -92,10 +92,7 @@ class ElementAction(argparse.Action):
         global current_element, elements
         # Handle the element suboptions (valid only if we have an un-flushed
         # element)
-        if option_string == "--eid" or \
-           option_string == "--egen" or \
-           option_string == "--eloc" or \
-           option_string == "--elen":
+        if option_string in ["--eid", "--egen", "--eloc", "--elen"]:
             if len(current_element) > 0:
                 # Update the appropriate field in current element
                 if option_string == "--eid":
@@ -197,7 +194,29 @@ def validate_args(args, elements):
               format(args.generation))
         success = False
 
+    # Is the image length a multiple of the erase-block size?
+    if not block_aligned(args.image_length, args.erase_size):
+        print prog, "Error: --image-length is not a multiple of --erase-size value."
+        success = False
+
+    # Is the element location aligned with the block size?
+    for element in elements:
+        element_location = element[INDEX_CE_ELOC]
+        if not block_aligned(element_location, args.erase_size):
+            print prog, "Error: --element-location is not a multiple of --erase-size value."
+            success = False
+
+        # Does the element location fall within twice the header-block size and the
+        # image length?
+        if not (element_location >= 2 * header_block_size(args.erase_size) and \
+                element_location <= args.image_length):
+            print prog, "Error: --element-location", format(element_location,"#x"), \
+                        "outside the range of twice the header-block size", \
+                        format(header_block_size(args.erase_size),"#x"), \
+                        "and the --image-length", format(args.image_length,"#x")
+
     # TODO: Other checks TBD
+
     return success
 
 
@@ -252,6 +271,7 @@ def main():
     """
     global current_element, elements
     parser = argparse.ArgumentParser()
+    success = True
 
     # args that consume files
     parser.add_argument("--s2f", "--stage-2-fw",
@@ -343,6 +363,7 @@ def main():
     if not ffff_romimage.init(args.name, args.flash_capacity,
                               args.erase_size, args.image_length,
                               args.generation):
+        print prog, "Could not populate FFFF header from args"
         sys.exit(PROGRAM_ERRORS)
 
     # Add in all of the elements
@@ -361,9 +382,9 @@ def main():
 
     # Write the FFFF file (i.e., header and element files
     if not ffff_romimage.write(args.out):
-        error("There were errors:")
+        print prog, "Errors writing FFFF file:"
         ffff_romimage.display(args.out)
-        error("There were errors")
+        print prog, "Writing FFFF file failed."
         sys.exit(PROGRAM_ERRORS)
 
     # Optionally display the header info

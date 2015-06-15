@@ -281,10 +281,13 @@ class FfffRomimage:
         Create the FFFF file, write the FFFF ROMimage buffer to it and return
         a success flag.  Appends the default FFFF file extension if omitted
         """
+        
         # Reject the write if we didn't pass the sniff test
-        if self.ffff0.header_validity != FFFF_HDR_VALID or \
-           self.ffff1.header_validity != FFFF_HDR_VALID:
-            error("invalid FFFF header:")
+        if self.ffff0.header_validity != FFFF_HDR_VALID:
+            print self.prog, "Error: invalid FFFF header 0"
+            return False
+        if self.ffff1.header_validity != FFFF_HDR_VALID:
+            print self.prog, "Error: invalid FFFF header 1"
             return False
 
         # Ensure the output file ends in the default file extension if

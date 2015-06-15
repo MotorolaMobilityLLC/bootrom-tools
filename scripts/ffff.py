@@ -43,6 +43,14 @@ from ffff_element import FFFF_HDR_LENGTH, FFFF_HDR_VALID, \
 
 from util import error, is_power_of_2, next_boundary, is_constant_fill
 
+def header_block_size(erase_block_size):
+    # Determine the size of the FFFF header block
+    #
+    # The size is defined as some power-of-2 * the erase-block-size
+
+    for size in range(erase_block_size, FFFF_MAX_HEADER_BLOCK_SIZE):
+        if size > FFFF_HDR_LENGTH:
+            return size;
 
 # FFFF representation
 #
@@ -87,13 +95,7 @@ class Ffff:
         self.element_location_max = image_length
 
     def header_block_size(self):
-        # Determine the size of the FFFF header block
-        #
-        # The size is defined as some power-of-2 * the erase-block-size
-
-        for size in range(self.erase_block_size, FFFF_MAX_HEADER_BLOCK_SIZE):
-            if size > FFFF_HDR_LENGTH:
-                return size
+        return header_block_size(self.erase_block_size)
 
     def unpack(self):
         """Unpack an FFFF header from a buffer"""
@@ -229,6 +231,8 @@ class Ffff:
             if elt_a.element_location < (2 * self.header_block_size()):
                 self.collisions_found = True
                 collision += [FFFF_HEADER_COLLISION]
+                print self.prog, "Element at location", format(elt_a.element_location, "#x"), \
+                "collides with two header blocks of size", format(2 * self.header_block_size(), "#x")
 
             for j, elt_b in enumerate(self.elements):
                 # skip checking one's self
@@ -262,6 +266,12 @@ class Ffff:
 
             self.collisions += [collision]
             self.duplicates += [duplicate]
+        if self.collisions_found:
+            print self.prog, "Found collisions in FFFF element table!"
+        if self.duplicates_found:
+            print self.prog, "Found duplicates in FFFF element table!"
+        if self.invalid_elements_found:
+            print self.prog, "Found invalid elements in FFFF element table!"
         return not self.collisions_found and \
             not self.duplicates_found and \
             not self.invalid_elements_found
@@ -278,6 +288,7 @@ class Ffff:
                              self.header_offset+FFFF_HDR_LENGTH]
         if is_constant_fill(span, 0) or \
            is_constant_fill(span, 0xff):
+            print self.prog, "FFFF header validates as erased."
             self.header_validity = FFFF_HDR_ERASED
             return self.header_validity
 
@@ -304,11 +315,14 @@ class Ffff:
         span_end = self.header_offset + FFFF_HDR_OFF_TAIL_SENTINEL - \
             span_start
         if not is_constant_fill(self.ffff_buf[span_start:span_end], 0):
+            print self.prog, "Unused portions of header are not zeroed: ", \
+                span_start, " to ", span_end
             self.header_validity = FFFF_HDR_INVALID
             return self.header_validity
 
         # check for elemental problems
         if not self.validate_element_table():
+            print self.prog, "Invalid element table."
             self.header_validity = FFFF_HDR_INVALID
 
         return self.header_validity
