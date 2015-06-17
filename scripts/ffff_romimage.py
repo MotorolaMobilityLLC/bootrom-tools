@@ -284,10 +284,10 @@ class FfffRomimage:
         
         # Reject the write if we didn't pass the sniff test
         if self.ffff0.header_validity != FFFF_HDR_VALID:
-            print self.prog, "Error: invalid FFFF header 0"
+            error("Invalid FFFF header 0")
             return False
         if self.ffff1.header_validity != FFFF_HDR_VALID:
-            print self.prog, "Error: invalid FFFF header 1"
+            error("Invalid FFFF header 1")
             return False
 
         # Ensure the output file ends in the default file extension if

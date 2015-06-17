@@ -35,8 +35,8 @@ from ffff_romimage import FfffRomimage
 from ffff_element import FFFF_ELEMENT_STAGE2_FIRMWARE_PACKAGE, \
     FFFF_ELEMENT_STAGE3_FIRMWARE_PACKAGE, FFFF_ELEMENT_IMS_CERTIFICATE, \
     FFFF_ELEMENT_CMS_CERTIFICATE, FFFF_ELEMENT_DATA, FFFF_MAX_ELEMENTS
-
-from util import error
+from ffff import header_block_size
+from util import error, block_aligned
 
 # Program return values
 PROGRAM_SUCCESS = 0
@@ -196,24 +196,25 @@ def validate_args(args, elements):
 
     # Is the image length a multiple of the erase-block size?
     if not block_aligned(args.image_length, args.erase_size):
-        print prog, "Error: --image-length is not a multiple of --erase-size value."
+        error("--image-length is not a multiple of --erase-size value.")
         success = False
 
     # Is the element location aligned with the block size?
     for element in elements:
         element_location = element[INDEX_CE_ELOC]
         if not block_aligned(element_location, args.erase_size):
-            print prog, "Error: --element-location is not a multiple of --erase-size value."
+            error("--element-location is not a multiple of --erase-size value.")
             success = False
 
         # Does the element location fall within twice the header-block size and the
         # image length?
         if not (element_location >= 2 * header_block_size(args.erase_size) and \
                 element_location <= args.image_length):
-            print prog, "Error: --element-location", format(element_location,"#x"), \
-                        "outside the range of twice the header-block size", \
-                        format(header_block_size(args.erase_size),"#x"), \
-                        "and the --image-length", format(args.image_length,"#x")
+            error("--element-location " + format(element_location,"#x") + \
+                        " outside the range of twice the header-block size " + \
+                        format(header_block_size(args.erase_size),"#x") + \
+                        " and the --image-length " + \
+                        format(args.image_length,"#x"))
 
     # TODO: Other checks TBD
 
@@ -363,7 +364,7 @@ def main():
     if not ffff_romimage.init(args.name, args.flash_capacity,
                               args.erase_size, args.image_length,
                               args.generation):
-        print prog, "Could not populate FFFF header from args"
+        error("Could not populate FFFF header from args")
         sys.exit(PROGRAM_ERRORS)
 
     # Add in all of the elements
@@ -382,9 +383,9 @@ def main():
 
     # Write the FFFF file (i.e., header and element files
     if not ffff_romimage.write(args.out):
-        print prog, "Errors writing FFFF file:"
+        error("Errors writing FFFF file:")
         ffff_romimage.display(args.out)
-        print prog, "Writing FFFF file failed."
+        error("Writing FFFF file failed.")
         sys.exit(PROGRAM_ERRORS)
 
     # Optionally display the header info

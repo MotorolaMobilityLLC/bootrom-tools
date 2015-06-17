@@ -205,16 +205,16 @@ class FfffElement:
         self.in_range = self.element_location >= address_range_low and\
                         self.element_location < address_range_high
         if not self.in_range:
-            print self.prog, "Element location", format(self.element_location, "#x"), \
-            "falls outside address range", format(address_range_low, "#x"), "-", \
-            format(address_range_high, "#x")
+            error("Element location " + format(self.element_location, "#x") + \
+            " falls outside address range " + format(address_range_low, "#x") + \
+            "-" + format(address_range_high, "#x"))
 
         # check for alignment and type
         self.aligned = block_aligned(self.element_location,
                                      self.erase_block_size)
         if not self.aligned:
-            print self.prog, "Element location", format(self.element_location, "#x"), \
-            "unaligned to block size", format(self.erase_block_size, "#x")
+            error("Element location " + format(self.element_location, "#x") + \
+            " unaligned to block size " + format(self.erase_block_size, "#x"))
         self.valid_type = self.element_type >= \
             FFFF_ELEMENT_END_OF_ELEMENT_TABLE and \
             self.element_type <= FFFF_ELEMENT_DATA

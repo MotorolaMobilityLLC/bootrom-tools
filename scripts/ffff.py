@@ -231,8 +231,10 @@ class Ffff:
             if elt_a.element_location < (2 * self.header_block_size()):
                 self.collisions_found = True
                 collision += [FFFF_HEADER_COLLISION]
-                print self.prog, "Element at location", format(elt_a.element_location, "#x"), \
-                "collides with two header blocks of size", format(2 * self.header_block_size(), "#x")
+                error("Element at location " + \
+                    format(elt_a.element_location, "#x") + \
+                    " collides with two header blocks of size " + \
+                    format(2 * self.header_block_size(), "#x"))
 
             for j, elt_b in enumerate(self.elements):
                 # skip checking one's self
@@ -267,11 +269,11 @@ class Ffff:
             self.collisions += [collision]
             self.duplicates += [duplicate]
         if self.collisions_found:
-            print self.prog, "Found collisions in FFFF element table!"
+            error("Found collisions in FFFF element table!")
         if self.duplicates_found:
-            print self.prog, "Found duplicates in FFFF element table!"
+            error("Found duplicates in FFFF element table!")
         if self.invalid_elements_found:
-            print self.prog, "Found invalid elements in FFFF element table!"
+            error("Found invalid elements in FFFF element table!")
         return not self.collisions_found and \
             not self.duplicates_found and \
             not self.invalid_elements_found
@@ -288,7 +290,7 @@ class Ffff:
                              self.header_offset+FFFF_HDR_LENGTH]
         if is_constant_fill(span, 0) or \
            is_constant_fill(span, 0xff):
-            print self.prog, "FFFF header validates as erased."
+            error("FFFF header validates as erased.")
             self.header_validity = FFFF_HDR_ERASED
             return self.header_validity
 
@@ -315,14 +317,14 @@ class Ffff:
         span_end = self.header_offset + FFFF_HDR_OFF_TAIL_SENTINEL - \
             span_start
         if not is_constant_fill(self.ffff_buf[span_start:span_end], 0):
-            print self.prog, "Unused portions of header are not zeroed: ", \
-                span_start, " to ", span_end
+            error("Unused portions of header are not zeroed: ", + span_start + \
+                " to " + span_end)
             self.header_validity = FFFF_HDR_INVALID
             return self.header_validity
 
         # check for elemental problems
         if not self.validate_element_table():
-            print self.prog, "Invalid element table."
+            error("Invalid element table.")
             self.header_validity = FFFF_HDR_INVALID
 
         return self.header_validity
