@@ -317,8 +317,8 @@ class Ffff:
         span_end = self.header_offset + FFFF_HDR_OFF_TAIL_SENTINEL - \
             span_start
         if not is_constant_fill(self.ffff_buf[span_start:span_end], 0):
-            error("Unused portions of header are not zeroed: ", + span_start + \
-                " to " + span_end)
+            error("Unused portions of header are not zeroed: " + str(span_start) + \
+                " to " + str(span_end))
             self.header_validity = FFFF_HDR_INVALID
             return self.header_validity
 
