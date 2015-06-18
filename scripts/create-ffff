@@ -36,12 +36,8 @@ from ffff_element import FFFF_ELEMENT_STAGE2_FIRMWARE_PACKAGE, \
     FFFF_ELEMENT_STAGE3_FIRMWARE_PACKAGE, FFFF_ELEMENT_IMS_CERTIFICATE, \
     FFFF_ELEMENT_CMS_CERTIFICATE, FFFF_ELEMENT_DATA, FFFF_MAX_ELEMENTS
 from ffff import header_block_size
-from util import error, block_aligned
-
-# Program return values
-PROGRAM_SUCCESS = 0
-PROGRAM_WARNINGS = 1
-PROGRAM_ERRORS = 2
+from util import error, block_aligned, PROGRAM_SUCCESS, PROGRAM_WARNINGS, \
+    PROGRAM_ERRORS
 
 # The current element being parsed.
 # Element layout: [type, filename, ID, gen, loc, len].
@@ -215,6 +211,7 @@ def validate_args(args, elements):
                         format(header_block_size(args.erase_size),"#x") + \
                         " and the --image-length " + \
                         format(args.image_length,"#x"))
+            success = False
 
     # TODO: Other checks TBD
 

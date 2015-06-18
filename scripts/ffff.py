@@ -39,9 +39,10 @@ from ffff_element import FFFF_HDR_LENGTH, FFFF_HDR_VALID, \
     FFFF_ELEMENT_END_OF_ELEMENT_TABLE, FFFF_HEADER_COLLISION, \
     FFFF_HDR_ERASED, FFFF_SENTINEL, \
     FFFF_HDR_INVALID
+import sys
 
-
-from util import error, is_power_of_2, next_boundary, is_constant_fill
+from util import error, is_power_of_2, next_boundary, is_constant_fill, \
+    PROGRAM_SUCCESS, PROGRAM_WARNINGS, PROGRAM_ERRORS
 
 def header_block_size(erase_block_size):
     # Determine the size of the FFFF header block
@@ -349,6 +350,13 @@ class Ffff:
                 element.element_location = location
                 error("Note: Assuming element [{0:d}]"
                       " loads at {1:08x}".format(element.index, location))
+            if self.flash_image_length != 0 and \
+               element.element_location + element.element_length >= \
+               self.flash_image_length:
+                error("--element-location " + format(element.element_location, "#x") + \
+                    " + --element-length " + format(element.element_length, "#x") + \
+                    " exceeds --image-length " + format(self.flash_image_length, "#x"))
+                sys.exit(PROGRAM_ERRORS)
             location = next_boundary(element.element_location +
                                      element.element_length,
                                      self.erase_block_size)

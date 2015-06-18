@@ -32,6 +32,10 @@ from __future__ import print_function
 import sys
 import binascii
 
+# Program return values
+PROGRAM_SUCCESS = 0
+PROGRAM_WARNINGS = 1
+PROGRAM_ERRORS = 2
 
 def warning(*objs):
     """Print a warning message to stderr"""
@@ -60,7 +64,7 @@ def next_boundary(location, block_size):
 
 def is_constant_fill(bytes, fill_byte):
     """Check a range of bytes for a constant fill"""
-    return all(b == fill_byte for b in bytes)
+    return all(ord(b) == fill_byte for b in bytes)
 
 
 def display_binary_data(blob, show_all, indent=""):
