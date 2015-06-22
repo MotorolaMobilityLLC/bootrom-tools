@@ -36,6 +36,7 @@ from ffff_element import FFFF_MAX_HEADER_BLOCK_OFFSET, FFFF_SENTINEL, \
     FFFF_FILE_EXTENSION, FFFF_HDR_LENGTH, FFFF_HDR_VALID
 from ffff import Ffff
 from util import error, is_power_of_2
+import io
 
 # FFFF ROMimage representation
 #
@@ -118,7 +119,7 @@ class FfffRomimage:
             rf = None
             for i in range(len(names)):
                 try:
-                    rf = open(names[i], 'rb')
+                    rf = io.open(names[i], 'rb')
                     break
                 except:
                     rf = None
@@ -135,7 +136,7 @@ class FfffRomimage:
                 # Resize the buffer to hold the file
                 self.ffff_buf = bytearray(read_size)
                 rf.seek(0, 0)
-                self.ffff_buf = rf.read(read_size)
+                rf.readinto(self.ffff_buf)
                 rf.close()
 
                 if not self.get_romimage_characteristics():
