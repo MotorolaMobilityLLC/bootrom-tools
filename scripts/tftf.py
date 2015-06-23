@@ -399,7 +399,7 @@ class Tftf:
         for section in self.sections:
             offset = section.pack(self.tftf_buf, offset)
 
-    def add_section(self, section_type, section_data, copy_offset=0):
+    def add_section(self, section_type, section_data, copy_offset=0, skip=0):
         # Add a new section to the section table and return a success flag
         #
         # (This would be called by "sign-tftf" to add signature and
@@ -416,12 +416,12 @@ class Tftf:
             #      the write stage or someone explicitly calls "pack".)
             self.sections.insert(num_sections - 1,
                                  TftfSection(section_type,
-                                             len(section_data),
-                                             len(section_data),
+                                             len(section_data) - skip,
+                                             len(section_data) - skip,
                                              copy_offset, None))
 
             # Append the section data blob to our TFTF buffer
-            self.tftf_buf += section_data
+            self.tftf_buf += section_data[skip:]
 
             # Record the length of the entire TFTF blob (this will be longer
             # than the header's load_length)
@@ -431,7 +431,8 @@ class Tftf:
             error("Section table full")
             return False
 
-    def add_section_from_file(self, section_type, filename, copy_offset=0):
+    def add_section_from_file(self, section_type, filename, copy_offset=0, \
+                              skip=0):
         # Add a new section from a file and return a success flag
         #
         # (This would be called by "create-tftf" while/after parsing section
@@ -443,7 +444,7 @@ class Tftf:
                     section_data = readfile.read()
 
                 return self.add_section(section_type, section_data,
-                                        copy_offset)
+                                        copy_offset, skip)
             except:
                 error("Unable to read", filename)
                 return False
@@ -462,7 +463,7 @@ class Tftf:
         copy_offset = 0
         for section in self.sections:
             # Fill in any omitted section copy_offsets
-            section_start = copy_offset
+            section_start = max(copy_offset, section.copy_offset)
             copy_offset = section.update(copy_offset)
 
             # Only count the sections that are (or could be) signed
