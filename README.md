@@ -83,3 +83,36 @@ ELF header.
 The flags differing from Example 1 can be understood as follows:
 
 * `--elf`: Specifies the filename in which an ELF executable can be found.
+
+## Example 4: packaging a [nuttx](https://github.com/projectara/nuttx) FFFF and 
+a [bootrom](https://github.com/projectara/bootrom) into a "dual image" for ES2 
+hardware
+
+In this example, we hack the FFFF specification to package a 
+[bootrom](https://github.com/projectara/bootrom) *alongside* our FFFF image, 
+in the early portion of the binary.  This works only because the FFFF 
+specification expects to see the first FFFF header element at 
+address 0 in the flashrom.  If we instead place the 
+[bootrom](https://github.com/projectara/bootrom) there, the FFFF loader will 
+just assume the first FFFF header was corrupted and search for the "second" FFFF 
+header in progressively higher addresses in flashrom.  It will then find the 
+actual *first* FFFF header of our image (`~/nuttx-es2-debug-apbridge.ffff` in 
+this example), and load in accordance with that header.
+
+This basically **only** exists for testing purposes, and should **never** be 
+done in any kind of production environment, as it subverts the spirit of FFFF 
+generation numbering.  Unfortunately, this inevitably means someone will try 
+it :-).  *C'est la vie.*
+
+    ./create-dual-image --ffff ~/nuttx-es2-debug-apbridgea.ffff \
+    --bootrom ~/bootrom/build/bootrom.bin \
+    --out ~/es2-apbridgea-dual
+
+The flags can be understood as follows:
+
+* `--ffff`: Specifies the filename of the FFFF image to corrupt.
+* `--bootrom`: Specifies the filename of the raw 
+[bootrom](https://github.com/projectara/bootrom) to insert into the low 
+addresses of the image.
+* `--out`: Specifies the filename into which the output hack-image should be 
+written for testing purposes.

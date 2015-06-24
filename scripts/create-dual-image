@@ -1,0 +1,152 @@
+#! /usr/bin/env python
+
+#
+# Copyright (c) 2015 Google Inc.
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+# 1. Redistributions of source code must retain the above copyright notice,
+# this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+# this list of conditions and the following disclaimer in the documentation
+# and/or other materials provided with the distribution.
+# 3. Neither the name of the copyright holder nor the names of its
+# contributors may be used to endorse or promote products derived from this
+# software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+# THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+# OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+# WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+# ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+
+import argparse
+from util import error
+import os
+import io
+from ffff_element import FFFF_HDR_LENGTH, FFFF_MAX_HEADER_BLOCK_OFFSET
+from ffff_romimage import FfffRomimage
+
+def validate_args(args):
+    if not args.bootrom:
+        error("You must specify a bootrom binary image.")
+        return False
+    if not args.ffff:
+        error("You must specify an FFFF input file.")
+        return False
+    if not args.out:
+        error("You must specify an output filename.")
+        return False
+    return True
+
+def main():
+    """Application for packaging together FFFF images with bootrom binaries
+
+    Usage: create-dual-image --bootrom <file> --ffff <file>  --out <file>
+    Where:
+        --bootrom
+            Specifies the raw binary file for the bootrom
+        --ffff
+            Specifies the FFFF image file to package
+        --out
+            Specifies the output file
+    """
+
+    parser = argparse.ArgumentParser()
+
+     # String/file args
+    parser.add_argument("--bootrom",
+                        help="The bootrom binary image")
+    parser.add_argument("--ffff",
+                        help="The FFFF input filename")
+    parser.add_argument("--out",
+                        help="The output filename")
+
+    args = parser.parse_args()
+
+    # Sanity-check the arguments
+    if not validate_args(args):
+        error("Incomplete arguments")
+        sys.exit(errno)
+
+    try:
+        # We first open the bootrom image and FFFF image for binary reading.
+        bootrom_file = io.open(args.bootrom, 'rb')
+        ffff_file = io.open(args.ffff, 'rb')
+
+        # We want to find the first address where the FFFF secondary header
+        # is allowed to live, *after* the size of the bootrom image has already
+        # been filled.
+        ffff_address = FFFF_HDR_LENGTH
+        while ffff_address < os.path.getsize(args.bootrom) and\
+              ffff_address < FFFF_MAX_HEADER_BLOCK_OFFSET * 2:
+            ffff_address *= 2
+
+        # Having found that address, to which we'll write the FFFF image, we
+        # add it as an offset to the element locations for each FFFF element
+        # in the image.
+        #
+        # BLACK ART BEGINS INVOKING ELDRITCH ABOMINATIONS HERE.  BUT IT WORKS.
+        #
+        # The FFFF spec expects the FFFF image to begin at 0x0 in flashrom,
+        # with the first header found precisely there.  When we build our
+        # dual-image, we subvert that by inserting the raw bootrom binary at
+        # 0x0, where the ARM hardware will be able to find its boot vectors.
+        # The first FFFF header in the given image thus ends up getting located
+        # and loaded by the FFFF parser as if it were the second FFFF header.
+        ffff = FfffRomimage()
+        if not ffff.init_from_file(args.ffff):
+            raise IOError("Could not parse original FFFF.")
+        for elt in ffff.ffff0.elements + ffff.ffff1.elements:
+            elt.element_location += ffff_address
+        # We call post_process() to rebuild the FFFF element tables with the
+        # newly offsetted element locations.
+        ffff.post_process()
+
+        # We now open the output filename to begin binary writing.
+        out_file = io.open(args.out, 'wb')
+        # The first thing we do is dump in the raw bootrom binary.  We need its
+        # boot vectors to appear at the bottom of the flashrom memory where the
+        # ARM core expects them. 
+        out_file.write(bootrom_file.read())
+        print "Wrote", args.bootrom, "from 0 to",\
+              format(os.path.getsize(args.bootrom), "#x")
+
+        # We now seek to the smallest power-of-two erase-block boundary after
+        # the end of the raw bootrom binary, where the FFFF loader will try to
+        # find a second, uncorrupted FFFF image.
+        out_file.seek(ffff_address + ffff.ffff0.header_offset, io.SEEK_SET)
+
+        # Having found that location, we write the first reprocessed FFFF
+        # header into it.
+        out_file.write(ffff.ffff_buf[0:ffff.header_block_size])
+        # We then seek out the relative offset into our FFFF image where the
+        # actual second FFFF header wants to live, and write it there.
+        out_file.seek(ffff_address + ffff.ffff1.header_offset)
+        out_file.write(ffff.ffff_buf[ffff.ffff1.header_offset:ffff.ffff1.header_offset + \
+                       ffff.header_block_size])
+        # We then seek out the address where the FFFF image expects for actual
+        # element data to live, and write out the remainder of the FFFF image
+        # there, containing the element data.
+        ffff_file.seek(ffff.ffff1.header_offset + ffff.header_block_size, io.SEEK_SET)
+        out_file.write(ffff_file.read())
+        print "Wrote", args.ffff, "from", format(ffff_address, "#x"),\
+              "to", format(ffff_address + os.path.getsize(args.ffff), "#x")
+    except Exception as e:
+        error(e)
+    finally:
+        # We're done, so we need to close the files we opened.
+        out_file.close()
+        ffff_file.close()
+        bootrom_file.close()
+
+if __name__ == '__main__':
+    main()
