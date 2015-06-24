@@ -164,7 +164,7 @@ class Ffff:
                   self.header_offset + FFFF_HDR_OFF_TAIL_SENTINEL,
                   self.tail_sentinel)
 
-        # Pack the element headers into the TFTF header buffer
+        # Pack the element headers into the FFFF header buffer
         offset = self.header_offset + FFFF_HDR_OFF_ELEMENT_TBL
         for element in self.elements:
             offset = element.pack(self.ffff_buf, offset)
@@ -375,7 +375,7 @@ class Ffff:
                 self.flash_image_name[0:FFFF_FLASH_IMAGE_NAME_LENGTH]
         self.tail_sentinel = FFFF_SENTINEL
 
-        # Flush the structure elements to the TFTF buffer and do a final
+        # Flush the structure elements to the FFFF buffer and do a final
         # sniff test on the results
         self.pack()
         self.validate_ffff_header()
