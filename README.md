@@ -64,3 +64,22 @@ The flags can be understood as follows:
 * `--eloc`: The absolute address, within the FFFF image and flashrom address-space, at which the preceding element (here the `--s2f` element) is to be located, in bytes.  `--eloc` should be read as "Element Location".
 * `--eid`: The *e*lement *id*entifier, one-indexed.
 * `--out`: Specifies the filename to which to write the resultant FFFF image.
+
+## Example 3: packaging a [nuttx](https://github.com/projectara/nuttx) ELF 
+binary into a TFTF image
+
+This example proceeds in exactly the same way as Example 1, except that instead 
+of passing raw binary files for the firmware's `.text` and `.data` sections, 
+necessitating the manual passing of loading offsets, we instead pass a 
+[nuttx](https://github.com/projectara/nuttx) ELF executable to the `--elf` flag, 
+and let the script extract the `.text` and `.data` sections and offsets from the 
+ELF header.
+
+    ./create-tftf -v --elf ~/nuttx-es2-debug-apbridgea \
+    --load 0x10000000 --start 0x10000ae4 \
+    --out ~/nuttx-es2-debug-apbridgea.tftf \
+    --unipro-mfg 0x126 --unipro-pid 0x1000 --ara-vid 0x0 --ara-pid 0x1
+
+The flags differing from Example 1 can be understood as follows:
+
+* `--elf`: Specifies the filename in which an ELF executable can be found.
