@@ -284,7 +284,7 @@ def main():
     # Sanity-check the arguments
     if not validate_args(args, sections):
         error("Invalid args")
-        sys.exit(errno)
+        sys.exit(errno.EINVAL)
 
     # Populate the TFTF header from the command line args
     tftf_header = Tftf()
@@ -305,7 +305,7 @@ def main():
                                                             'skip', 0))
             if not success:
                 error("Too many sections")
-                sys.exit(errno)
+                sys.exit(errno.EFBIG)
         elif 'buffer' in section:
             offset = 0
             if 'addr' in section:
@@ -316,14 +316,14 @@ def main():
                                               section.get('skip', 0))
             if not success:
                 error("Too many sections")
-                sys.exit(errno)
+                sys.exit(errno.EFBIG)
 
     # Make the TFTF header internally consistent
     tftf_header.post_process()
 
     # Write the TFTF file (i.e., header and section files)
     if not tftf_header.write(args.out):
-        sys.exit(errno)
+        sys.exit(errno.EIO)
 
     # Optionally display the header info
     if args.verbose:

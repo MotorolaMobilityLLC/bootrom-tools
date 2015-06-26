@@ -70,7 +70,7 @@ def main():
 
     if not args.files:
         error("Missing files to display")
-        sys.exit(errno)
+        sys.exit(errno.EINVAL)
 
     # Walk the list of files
     for f in args.files:

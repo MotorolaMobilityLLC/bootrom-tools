@@ -75,7 +75,7 @@ def main():
     # Sanity-check the arguments
     if not validate_args(args):
         error("Incomplete arguments")
-        sys.exit(errno)
+        sys.exit(errno.EINVAL)
 
     try:
         # We first open the bootrom image and FFFF image for binary reading.
