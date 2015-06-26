@@ -65,8 +65,7 @@ The flags can be understood as follows:
 * `--eid`: The *e*lement *id*entifier, one-indexed.
 * `--out`: Specifies the filename to which to write the resultant FFFF image.
 
-## Example 3: packaging a [nuttx](https://github.com/projectara/nuttx) ELF 
-binary into a TFTF image
+## Example 3: packaging a [nuttx](https://github.com/projectara/nuttx) ELF binary into a TFTF image
 
 This example proceeds in exactly the same way as Example 1, except that instead 
 of passing raw binary files for the firmware's `.text` and `.data` sections, 
@@ -84,9 +83,7 @@ The flags differing from Example 1 can be understood as follows:
 
 * `--elf`: Specifies the filename in which an ELF executable can be found.
 
-## Example 4: packaging a [nuttx](https://github.com/projectara/nuttx) FFFF and 
-a [bootrom](https://github.com/projectara/bootrom) into a "dual image" for ES2 
-hardware
+## Example 4: packaging a [nuttx](https://github.com/projectara/nuttx) FFFF and a [bootrom](https://github.com/projectara/bootrom) into a "dual image" for ES2 hardware
 
 In this example, we hack the FFFF specification to package a 
 [bootrom](https://github.com/projectara/bootrom) *alongside* our FFFF image, 
