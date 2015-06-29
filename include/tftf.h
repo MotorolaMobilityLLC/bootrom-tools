@@ -62,13 +62,14 @@
  * @brief TFTF Section types (see: tftf_section.section_type)
  */
 enum tftf_section_type {
-    TFTF_SECTION_TYPE_END_OF_DESCRIPTORS    = 0x00,
-    TFTF_SECTION_TYPE_RAW_CODE_BLOCK,
+    TFTF_SECTION_TYPE_RAW_CODE_BLOCK        = 0x01,
     TFTF_SECTION_TYPE_RAW_DATA_BLOCK,
     TFTF_SECTION_TYPE_COMPRESSED_CODE_BLOCK,
     TFTF_SECTION_TYPE_COMPRESSED_DATA_BLOCK,
     TFTF_SECTION_TYPE_MANIFEST,
-    TFTF_SECTION_TYPE_SIGNATURE_BLOCK       = 0xff
+    TFTF_SECTION_TYPE_SIGNATURE_BLOCK       = 0x8f,
+    TFTF_SECTION_TYPE_CERTIFICATE,
+    TFTF_SECTION_TYPE_END_OF_DESCRIPTORS    = 0xFE
 };
 
 /**
@@ -82,7 +83,8 @@ enum tftf_section_type {
          ((t) == TFTF_SECTION_TYPE_COMPRESSED_CODE_BLOCK)? "compressed code" : \
          ((t) == TFTF_SECTION_TYPE_COMPRESSED_DATA_BLOCK)? "compressed data" : \
          ((t) == TFTF_SECTION_TYPE_MANIFEST)? "manifest" : \
-         ((t) == TFTF_SECTION_TYPE_SIGNATURE_BLOCK)? "signature" : "?")
+         ((t) == TFTF_SECTION_TYPE_SIGNATURE_BLOCK)? "signature" :  \
+         ((t) == TFTF_SECTION_TYPE_CERTIFICATE)? "certificate" : "?")
 
 
 /**
@@ -98,16 +100,14 @@ enum tftf_section_type {
 /**
  * @brief TFTF signature block field sizes
  */
-#define TFTF_SIGNATURE_KEY_NAME_LENGTH  64
-#define TFTF_SIGNATURE_KEY_HASH_LENGTH  32
+#define TFTF_SIGNATURE_KEY_NAME_LENGTH  96
 
 
 /**
  * @brief TFTF signature types (see: tftf_Signature.signature_type)
  */
 enum tftf_signature_type {
-    // ***** TBD *****
-//    TFTF_SIGNATURE_TYPE_??     = 0x??,
+    TFTF_SIGNATURE_TYPE_RSA2048_SHA256 = 0x01,
 };
 
 
@@ -132,10 +132,10 @@ struct __attribute__ ((__packed__)) tftf_section
  */
 struct __attribute__ ((__packed__)) tftf_hdr
 {
-    // The global or "fixed" part of the header:
+    /* The global or "fixed" part of the header: */
     uint32_t            sentinel;
-    char                timestamp[TFTF_TIMESTAMP_LENGTH];     // ASCII string
-    char                fw_pkg_name[TFTF_FW_PKG_NAME_LENGTH]; // ASCII string
+    char                timestamp[TFTF_TIMESTAMP_LENGTH];     /* ASCIIZ string */
+    char                fw_pkg_name[TFTF_FW_PKG_NAME_LENGTH]; /* ASCIIZ string */
     uint32_t            load_length;
     uint32_t            load_base;
     uint32_t            expanded_length;
@@ -145,10 +145,10 @@ struct __attribute__ ((__packed__)) tftf_hdr
     uint32_t            ara_vendor_id;
     uint32_t            ara_product_id;
 
-    // The section-specific part of the header.
+    /* The section-specific part of the header. */
     struct tftf_section section_descriptors[TFTF_MAX_SECTIONS];
 
-    // Padding to bring up up to 512 bytes.
+    /* Padding to bring up up to 512 bytes. */
     uint8_t             padding[TFTF_PADDING];
 };
 
@@ -159,10 +159,15 @@ struct __attribute__ ((__packed__)) tftf_hdr
 struct __attribute__ ((__packed__)) tftf_signature_block
 {
     uint32_t    length;
-    uint32_t    signature_type;                 /* enum tftf_signature_type */
-    char        key_name[TFTF_SIGNATURE_KEY_NAME_LENGTH];   /* ASCII string */
-    uint8_t     key_hash[TFTF_SIGNATURE_KEY_HASH_LENGTH];
-    uint8_t     signature_blob[1];  /* Placeholder for start of signature */
+
+    /* Holds a tftf_signature_type enum */
+    uint32_t    signature_type;
+
+    /* ASCIIZ string */
+    char        key_name[TFTF_SIGNATURE_KEY_NAME_LENGTH];
+
+    /* Placeholder for start of signature */
+    uint8_t     signature_blob[1];
 };
 
 

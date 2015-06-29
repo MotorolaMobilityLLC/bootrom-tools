@@ -1,0 +1,294 @@
+#! /usr/bin/env python
+
+#
+# Copyright (c) 2015 Google Inc.
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+# 1. Redistributions of source code must retain the above copyright notice,
+# this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+# this list of conditions and the following disclaimer in the documentation
+# and/or other materials provided with the distribution.
+# 3. Neither the name of the copyright holder nor the names of its
+# contributors may be used to endorse or promote products derived from this
+# software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+# THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+# OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+# WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+# ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+
+from __future__ import print_function
+import sys
+import os
+import argparse
+import subprocess
+from stat import S_ISREG
+from util import error
+
+MAX_FILES = 4
+
+MAX_KEY_NAME_LENGTH = 96
+
+USAGE = """"%(prog)s  public_key.pem... --format <format> --usage <string> \\
+           {--name <string>} {--singleton}
+Where:
+    public_key.pem
+        One or more public key files
+     --usage
+        The right half of the key names (e.g. 's2fvk.projectara.com')
+     --format
+        Specifies the format (e.g., 'rsa2048-sha256')
+     --name
+        Name of the 'C' variable containing the keys (default: 'public_keys')
+     --singleton
+        Declare the one key as a struct instead of an array
+"""
+
+COPYRIGHT = """/*
+ * Copyright (c) 2015 Google Inc.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 1. Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ * this list of conditions and the following disclaimer in the documentation
+ * and/or other materials provided with the distribution.
+ * 3. Neither the name of the copyright holder nor the names of its
+ * contributors may be used to endorse or promote products derived from this
+ * software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+ * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+"""
+
+INCLUDES = """
+#include <stddef.h>
+#include "crypto.h"
+
+"""
+
+KEY_ARRAY = "const crypto_public_key {0:s}[NUMBER_OF_PUBLIC_KEYS] = {1:s}\n"
+
+# TFTF Signature Types and associated dictionary of types and names
+# NOTE: When adding new types, both the "define" and the dictionary
+# need to be updated.
+TFTF_SIGNATURE_TYPE_UNKNOWN = 0x00
+TFTF_SIGNATURE_TYPE_RSA_2048_SHA_256 = 0x01
+tftf_signature_types = {"rsa2048-sha256":
+                        TFTF_SIGNATURE_TYPE_RSA_2048_SHA_256}
+tftf_signature_names = {TFTF_SIGNATURE_TYPE_RSA_2048_SHA_256:
+                        "ALGORITHM_TYPE_RSA2048_SHA256"}
+
+
+def get_key_type(key_type_string):
+    """convert a string into a key_type
+
+    returns a numeric key_type, or None if invalid
+    """
+    return tftf_signature_types[key_type_string]
+
+
+def get_key_define(key_type):
+    try:
+        return tftf_signature_names[key_type]
+    except:
+        return "INVALID"
+
+
+def get_key_filename(filename):
+    # Add in any missing extension to the filename
+
+    # Check for the file, and if that fails, try appending the
+    # extension.
+    names = (filename, filename + ".pem")
+    for name in names:
+        try:
+            mode = os.stat(name).st_mode
+            if S_ISREG(mode):
+                return name
+        except:
+            # stat throws an exception for missing files.
+            continue
+
+    # Can't find the file in any of its variations
+    return None
+
+
+def validate_input_files(keyfiles):
+    # Validate the list of key file names
+    success = True
+    for i, f in enumerate(keyfiles):
+        pathname = get_key_filename(f)
+        if not pathname:
+            print("Can't find", f)
+            success = False
+        else:
+            if (pathname != f):
+                keyfiles[i] = pathname
+    return success
+
+
+def get_key_name_root(keyfile):
+    # Extract a key name root from the pathname by discarding all path
+    # and extensions from the pathname.
+
+    # Trim off any leading path
+    index = max(keyfile.rfind("/") + 1, 0)
+    keyfile = keyfile[index:]
+
+    # Trim off all extensions
+    index = keyfile.find(".")
+    if index > 0:
+        return keyfile[:index]
+    else:
+        return keyfile
+
+
+def convert_pem_to_array(keyfile, wf, usage, key_type, indent, include_braces):
+    # Convert a public key file into a C-style array appended to the ouput
+    # file
+
+    # Note: indent3 is 7 spaces and not 8 because each array element is
+    # printed with a leading blank.
+    indent2 = indent + "    "
+    indent3 = indent + "       "
+
+    # Generate the key_name from the file and verify that it will fit
+    # in the 96-byte field as a null-terminated string
+    key_name = get_key_name_root(keyfile) + "@" + usage
+    if (len(key_name) >= MAX_KEY_NAME_LENGTH):
+        error("Key name too long: '{0:s}'".format(key_name))
+        error("Key name must be <", MAX_KEY_NAME_LENGTH, "characters")
+        sys.exit(1)
+
+    # Get the blob and strip off the cruft around it.
+    str = subprocess.check_output(["openssl", "rsa", "-pubin", "-text",
+                                   "-noout", "-in", keyfile])
+    array_start = str.index("Modulus:") + 13
+    array_end = str.index("Exponent:") - 1
+    str = str[array_start:array_end]
+    str = str.replace("\n", "")
+    str = str.replace(" ", "")
+    block = str.split(':')
+    block = block[1:]
+    column = 0
+    if include_braces:
+        wf.write("{0:s}{1:s}\n".format(indent, "{"))
+    wf.write("{0:s}.type = {1:s},\n".format(indent2, get_key_define(key_type)))
+    wf.write("{0:s}.key_name = \"{1:s}\",\n".format(indent2, key_name))
+    wf.write("{0:s}.key = {1:s}\n".format(indent2, "{"))
+    for index, byte in enumerate(block):
+        # Indent the beginning of the line
+        if (column == 0):
+            wf.write(indent3)
+        # Break the line if it will go over the 80-char limit
+        if index == 255:
+            wf.write(" 0x{0:s}\n".format(byte))
+        elif column < 11:
+            wf.write(" 0x{0:s},".format(byte))
+            column += 1
+        else:
+            wf.write(" 0x{0:s},\n".format(byte))
+            column = 0
+    wf.write("{0:s}{1:s}\n".format(indent2, "}"))
+    if include_braces:
+        wf.write("{0:s}{1:s},\n".format(indent, "}"))
+
+
+def process_input_files(keyfiles, wf, array_name, key_type, usage, singleton):
+    # Convert each of the public key files into a C array in a header file
+        # Add the boilerplate copyright and #includes
+        wf.write(COPYRIGHT)
+        wf.write(INCLUDES)
+
+        # Add the constant for the number of keys in the array
+        if singleton:
+            # Add the "public_keys" declaration
+            wf.write("const crypto_public_key {0:s} = {1:s}\n".
+                     format(array_name, "{"))
+
+            # Process each file as a component of the array
+            for f in keyfiles:
+                convert_pem_to_array(f, wf, usage, key_type, "", False)
+
+            # Complete the declaration
+            wf.write("};\n\n")
+        else:
+            wf.write("#define NUMBER_OF_PUBLIC_KEYS   {0:d}\n\n".
+                     format(len(keyfiles)))
+
+            # Add the start of the "public_keys" array
+            wf.write(KEY_ARRAY.format(array_name, "{"))
+
+            # Process each file as a component of the array
+            for f in keyfiles:
+                convert_pem_to_array(f, wf, usage, key_type, "    ", True)
+
+            # Complete the 2D array declaration
+            wf.write("};\n\n")
+
+
+def main():
+    """Application to generate a header file containing 4 public keys
+
+    This is covered in detail in "ES3 Bridge ASIC Boot ROM High Level Design".
+    """
+    # Parse the command line args
+    parser = argparse.ArgumentParser(usage=USAGE)
+
+    parser.add_argument("keyfiles", metavar="N", nargs="*",
+                        help="One or more public key files (e.g., foo.pem)")
+    parser.add_argument("--format", required=True,
+                        help="Specifies the format (e.g., rsa2048-sha256)")
+    parser.add_argument("--usage", required=True,
+                        help="The right half of the key name(s)")
+    parser.add_argument("--name", required=False, default="public_keys",
+                        help="Name of the 'C' array or single struct")
+    parser.add_argument("--singleton", action='store_true',
+                        help="Declare the one key as a variable instead "
+                             "of an array of variables")
+
+    args = parser.parse_args()
+
+    # Validate parameters
+    key_type = get_key_type(args.format)
+    if (not key_type):
+        error("unknown --format")
+        sys.exit(1)
+
+    if args.singleton and (len(args.keyfiles) > 1):
+        error("--singleton specified with multiple files")
+        sys.exit(1)
+
+    # Create the file on stdout
+    if validate_input_files(args.keyfiles):
+        process_input_files(args.keyfiles, sys.stdout, args.name, key_type,
+                            args.usage, args.singleton)
+
+## Launch main
+#
+if __name__ == '__main__':
+    main()
