@@ -127,7 +127,7 @@ def main():
     This is covered in detail in "ES3 Bridge ASIC Boot ROM High Level Design".
 
     Usage: bin2verilog --in <file> --out <file> \
-           [--ap | --gp] --offset <num> --size <num>
+           [--apb | --gpb] --offset <num> --size <num>
     Where:
         --input
             The pathname of the input (.bin) file.
