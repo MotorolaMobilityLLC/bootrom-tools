@@ -67,10 +67,10 @@ def validate_args(args):
         error("Missing --out file")
         success = False
     if not args.apb and not args.gpb:
-        error("You must specify --ap or --gp")
+        error("You must specify --apb or --gpb")
         success = False
     elif args.apb and args.gpb:
-        error("You must specify only one of --ap or --gp")
+        error("You must specify only one of --apb or --gpb")
         success = False
     if args.load < 0 or args.load > 0xffffffff:
         error("--load is out of range")
@@ -96,9 +96,16 @@ def filter_file(infilename, outfilename, load, rom_size, version,
     rom_size /= 4
     with open(infilename, "rb") as infile:
         with open(outfilename, "w") as outfile:
-            # Write the file out as "@addr ULONG" in hex.
+            # Read the input file and pad as needed to be DWORD-aligned
             buffer = infile.read()
+            padding = len(buffer) % 4
+            if padding > 0:
+                while padding < 4:
+                    buffer += "\0"
+                    padding += 1
             address = load
+
+            # Write the file out as "@addr ULONG" in hex.
             for offset in range(0, (rom_size - 2) * 4, 4):
                 if offset < len(buffer):
                     # Get the next ULONG
