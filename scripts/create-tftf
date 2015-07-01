@@ -108,6 +108,7 @@ class ElfFileAction(argparse.Action):
                 image = ELFFile(elf_file)
                 elf_sections = []
                 code_section = image.get_section_by_name('.text')
+                namespace.load = code_section['sh_addr']
                 elf_sections.append({'type': TFTF_SECTION_TYPE_RAW_CODE,
                                      'addr': code_section['sh_addr'],
                                      'buffer': code_section.data()})
@@ -116,6 +117,7 @@ class ElfFileAction(argparse.Action):
                                      'addr': data_section['sh_addr'],
                                      'buffer': data_section.data()})
                 sections += elf_sections
+                namespace.start = image['e_entry']
         except IOError as e:
             error(option_string, " must be followed by an ELF image!")
         except Exception as e:
@@ -289,8 +291,16 @@ def main():
     # Populate the TFTF header from the command line args
     tftf_header = Tftf()
     tftf_header.firmware_package_name = args.name
-    tftf_header.load_base = args.load
-    tftf_header.start_location = args.start
+    if args.load != 0:
+        tftf_header.load_base = args.load
+    else:
+        error("No loading address specified.")
+        sys.exit(errno.EINVAL)
+    if args.start != 0:
+        tftf_header.start_location = args.start
+    else:
+        error("No entry point specified.")
+        sys.exit(errno.EINVAL)
     tftf_header.unipro_mfg_id = args.unipro_mfg
     tftf_header.unipro_pid = args.unipro_pid
     tftf_header.ara_vid = args.ara_vid

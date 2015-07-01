@@ -3,8 +3,8 @@
 The scripts/ directory in this repository contains Python scripts for packaging firmware images into Project Ara's
 TFTF and FFFF image formats.  Each script will list its parameters if it is called with the flag `--help`.
 
-The `create-dual-image` script requires [pyelftools](https://github.com/eliben/pyelftools), which can be installed
-via:
+The `create-dual-image` script requires [pyelftools](https://github.com/eliben/pyelftools) to use its `--elf`
+flag, which can be installed via:
 
     sudo pip install pyelftools
 
@@ -80,13 +80,19 @@ and let the script extract the `.text` and `.data` sections and offsets from the
 ELF header.
 
     ./create-tftf -v --elf ~/nuttx-es2-debug-apbridgea \
-    --load 0x10000000 --start 0x10000ae4 \
+    --start 0x10000ae4 \
     --out ~/nuttx-es2-debug-apbridgea.tftf \
     --unipro-mfg 0x126 --unipro-pid 0x1000 --ara-vid 0x0 --ara-pid 0x1
 
 The flags differing from Example 1 can be understood as follows:
 
 * `--elf`: Specifies the filename in which an ELF executable can be found.
+
+Note that in this case, a `--load` flag is *not* supplied, and the loading
+address is thus thus taken from the `.text` section's ELF section header.
+Likewise, the value of the `--start` flag can also be replaced with the ELF
+header's specified entry point, although we *have* supplied `--start` here since
+we wish to specify a non-default entry point.
 
 ## Example 4: packaging a [nuttx](https://github.com/projectara/nuttx) FFFF and a [bootrom](https://github.com/projectara/bootrom) into a "dual image" for ES2 hardware
 
