@@ -48,7 +48,7 @@ def main():
 
     This is covered in detail in "ES3 Bridge ASIC Boot ROM High Level Design".
 
-    Usage: display-tftf {-v} <file>...
+    Usage: display-tftf {-v | --verbose} {--map} <file>...
     Where:
         -v | --verbose
             Display a synopsis of each TFTF section in addition to the TFTF\
@@ -60,6 +60,10 @@ def main():
     parser.add_argument("-v", "--verbose",
                         action='store_true',
                         help="adds more detail")
+
+    parser.add_argument("--map", "-m",
+                        action='store_true',
+                        help="saves the field offsets in a .map file")
 
     parser.add_argument("files",
                         metavar='N',
@@ -78,6 +82,8 @@ def main():
         tftf_header.display(f)
         if args.verbose:
             tftf_header.display_data(f)
+        if args.map:
+            tftf_header.create_map_file(f, 0)
 
 
 ## Launch main

@@ -74,11 +74,9 @@ class FfffRomimage:
         """
         # Validate the parameters
         if not is_power_of_2(erase_block_size):
-            error("Erase block size must be 2**n")
-            return False
+            raise ValueError("Erase block size must be 2**n")
         elif (image_length % erase_block_size) != 0:
-            error("Image length must be a multiple of erase bock size")
-            return False
+            raise ValueError("Image length must be a multiple of erase bock size")
 
         self.flash_image_name = flash_image_name
         self.flash_capacity = flash_capacity
@@ -125,8 +123,7 @@ class FfffRomimage:
                     rf = None
 
             if not rf:
-                error(" can't find FFFF file", filename)
-                return False
+                raise ValueError(" can't find FFFF file", filename)
 
             try:
                 # Read the FFFF file.
@@ -139,9 +136,7 @@ class FfffRomimage:
                 rf.readinto(self.ffff_buf)
                 rf.close()
 
-                if not self.get_romimage_characteristics():
-                    error("invalid file")
-                    return False
+                self.get_romimage_characteristics()
 
                 # Create the 1st FFFF header/object
                 #self.mv = memoryview(self.ffff_buf)
@@ -168,7 +163,6 @@ class FfffRomimage:
                     # Create the 2nd FFFF header/object?
                     if nose_sentinel == FFFF_SENTINEL and \
                             tail_sentinel == FFFF_SENTINEL:
-                        self.header_block_size = offset
                         self.ffff1 = Ffff(self.ffff_buf, offset,
                                           self.flash_image_name,
                                           self.flash_capacity,
@@ -180,13 +174,11 @@ class FfffRomimage:
                     else:
                         offset <<= 1
             except:
-                error("can't read", filename)
-                success = False
+                raise ValueError("can't read", filename)
         else:
-            error("no file specified")
-            success = False
+            raise ValueError("no file specified")
 
-        return success
+        return True
 
     def header_block_size(self):
         # Determine the size of the FFFF header block, defined as a
@@ -218,21 +210,17 @@ class FfffRomimage:
         # Verify the sentinels
         if sentinel != FFFF_SENTINEL or \
                 tail_sentinel != FFFF_SENTINEL:
-            error("invalid sentinel")
-            return False
+            raise ValueError("invalid sentinel")
 
         # Validate the block size and image length
         if not is_power_of_2(self.erase_block_size):
-            error("Erase block size must be 2**n")
-            return False
+            raise ValueError("Erase block size must be 2**n")
         elif (self.flash_image_length % self.erase_block_size) != 0:
-            error("Image length must be a multiple of erase bock size")
-            return False
+            raise ValueError("Image length must be a multiple of erase bock size")
 
         # Determine the ROM range that can hold the elements
         self.element_location_min = 2 * self.header_block_size()
         self.element_location_max = self.flash_capacity
-        return True
 
     def add_element(self, element_type, element_id, element_generation,
                     element_location, element_length, filename):
@@ -251,8 +239,7 @@ class FfffRomimage:
                                        element_location, element_length,
                                        filename)
         else:
-            error("No FFFF in which to add element")
-            return False
+            raise ValueError("No FFFF in which to add element")
 
     def post_process(self):
         """Post-process the FFFF header
@@ -264,7 +251,7 @@ class FfffRomimage:
             self.ffff0.post_process(self.mv)
             self.ffff1.post_process(self.mv)
         else:
-            error("No FFFF to post-process")
+            raise ValueError("No FFFF to post-process")
 
     def display(self, header_index, filename=None):
         """Display an FFFF header"""
@@ -274,7 +261,7 @@ class FfffRomimage:
             self.ffff0.display(0, not identical, identical, filename)
             self.ffff1.display(1, True, identical, filename)
         else:
-            error("No FFFF to display")
+            raise ValueError("No FFFF to display")
 
     def write(self, out_filename):
         """Create the FFFF file
@@ -285,26 +272,21 @@ class FfffRomimage:
         
         # Reject the write if we didn't pass the sniff test
         if self.ffff0.header_validity != FFFF_HDR_VALID:
-            error("Invalid FFFF header 0")
-            return False
+            raise ValueError("Invalid FFFF header 0")
         if self.ffff1.header_validity != FFFF_HDR_VALID:
-            error("Invalid FFFF header 1")
-            return False
+            raise ValueError("Invalid FFFF header 1")
 
         # Ensure the output file ends in the default file extension if
         # the user hasn't specified their own extension.
         if rfind(out_filename, ".") == -1:
             out_filename += FFFF_FILE_EXTENSION
 
-        try:
-            # Output the entire FFFF blob
-            with open(out_filename, 'wb') as wf:
-                wf.write(self.ffff_buf)
-                print("Wrote", out_filename)
-                return True
-        except:
-            error("Failed to write", out_filename)
-            return False
+
+        # Output the entire FFFF blob
+        with open(out_filename, 'wb') as wf:
+            wf.write(self.ffff_buf)
+            print("Wrote", out_filename)
+            return True
 
     def explode(self, root_filename=None):
         """Write out the component elements
@@ -320,3 +302,34 @@ class FfffRomimage:
         else:
             self.ffff0.write_elements(root_filename + "_0")
             self.ffff1.write_elements(root_filename + "_1")
+
+    def create_map_file(self, base_name, base_offset):
+        """Create a map file from the base name
+
+        Create a map file from the base name substituting or adding ".map"
+        as the file extension, and write out the offsets for the FFFF and
+        TFTF fields.
+        """
+        index = base_name.rindex(".")
+        if index != -1:
+            base_name = base_name[:index]
+        map_name = base_name + ".map"
+        with open(map_name, 'w') as mapfile:
+            self.write_map(mapfile, base_offset)
+
+    def write_map(self, wf, base_offset):
+        """Display the field names and offsets of an FFFF romimage"""
+        if self.ffff0 and self.ffff1:
+            self.ffff0.write_map(wf, 0, "ffff[0]")
+            self.ffff1.write_map(wf, self.header_block_size(), "ffff[1]")
+            if self.ffff0.same_as(self.ffff1):
+                # The FFFF headers are identical, just traverse one for
+                # the component TFTFs
+                self.ffff0.write_map_elements(wf, 0, "ffff")
+            else:
+                # The FFFF headers are different, so traverse both for
+                # the component TFTFs
+                self.ffff0.write_map_elements(wf, 0, "ffff[0]")
+                self.ffff1.write_map_elements(wf, 0, "ffff[1]")
+        else:
+            raise ValueError("No FFFF to display")
