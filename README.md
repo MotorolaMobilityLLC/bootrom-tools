@@ -3,6 +3,11 @@
 The scripts/ directory in this repository contains Python scripts for packaging firmware images into Project Ara's
 TFTF and FFFF image formats.  Each script will list its parameters if it is called with the flag `--help`.
 
+The `create-dual-image` script requires [pyelftools](https://github.com/eliben/pyelftools), which can be installed
+via:
+
+    sudo pip install pyelftools
+
 ## Example 1: packaging a [nuttx](https://github.com/projectara/nuttx) firmware into a TFTF image
 The following command, executes from within scripts/, will package a nuttx firmware specified in two raw-binary parts,
 one of which has a nontrivial linking offset, into a TFTF image.  Assume that `~/nuttx-es2-debug-apbridgea.text`
