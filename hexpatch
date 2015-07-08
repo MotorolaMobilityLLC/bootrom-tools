@@ -1,0 +1,253 @@
+#! /usr/bin/env python
+
+#
+# Copyright (c) 2015 Google Inc.
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+# 1. Redistributions of source code must retain the above copyright notice,
+# this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+# this list of conditions and the following disclaimer in the documentation
+# and/or other materials provided with the distribution.
+# 3. Neither the name of the copyright holder nor the names of its
+# contributors may be used to endorse or promote products derived from this
+# software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+# THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+# OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+# WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+# ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+
+from __future__ import print_function
+import sys
+import os
+import argparse
+import errno
+from util import warning, error, print_to_error
+#from string import split
+
+OFFSET_HELP = """The offset from the start of the file
+It may be specified as any of:
+    num
+    num+num
+    symbol
+    symbol+num
+(All numbers are in hex)"""
+
+
+def auto_int(x):
+    # Workaround to allow hex numbers to be entered for numeric arguments
+    return int(x, 16)
+
+
+def validate_args(args):
+    # Sanity-check the command line args and return a "valid" flag
+    if not args.file:
+        error("Missing the file to alter")
+        return False
+
+    if not args.map:
+        warning("No map file specified")
+
+    if not args.replace:
+        error("No new bytes specified")
+        return False
+    else:
+        num_new_bytes = len(args.replace)
+        for num in args.replace:
+            if not (0 <= num < 256):
+                error("Replace byte", num, "out of range")
+                return False
+
+    new_byte_modes = 0
+    if args.xor_with:
+        new_byte_modes += 1
+
+    if args.or_with:
+        new_byte_modes += 1
+
+    if args.and_with:
+        new_byte_modes += 1
+
+    if new_byte_modes > 1:
+        error("Only one of -x, -o, or -a are allowed")
+        return False
+
+    if args.verify:
+        if len(args.verify) != num_new_bytes:
+            error("The number of verify bytes must match "
+                  "the number of new bytes")
+            return False
+        for num in args.verify:
+            if not (0 <= num < 256):
+                error("Verify byte", num, "out of range")
+                return False
+
+    return True
+
+
+def find_symbolic_offset(symbol_name, map_file=None):
+    """ Look up a symbol in the symbol table
+
+    Returns an offset if found, otherwise raises an exception
+    """
+    if not map_file:
+        raise ValueError("Missing map file")
+
+    with open(map_file, 'r') as map:
+        for line in map:
+            parts = line.split()
+            if (parts[0] == symbol_name) and \
+               (len(parts) > 1):
+                try:
+                    return int(parts[1], 16)
+                except:
+                    raise ValueError("Invalid offset:", parts[1])
+        # Fell through without finding the symbol
+        raise ValueError("symbol not found")
+
+
+def parse_offset(offset_string, map_file=None):
+    """ Parse the offset parameter into a numeric offset
+
+    The offset may be specified as any of:
+        num
+        num+num
+        symbol
+        symbol+num
+
+    Returns the offset, otherwise raises an exception
+    """
+    base_offset = 0
+    offset = 0
+    parts = offset_string.split("+")
+    # If the first/only component isn't a hex number, view it as a symbol name
+    try:
+        base_offset = int(parts[0], 16)
+    except:
+        base_offset = find_symbolic_offset(parts[0], map_file)
+    if base_offset < 0:
+        raise ValueError("(Base) offset is negative")
+
+    # Is there a 2nd part (i.e., base+offset)?
+    if (len(parts) > 1):
+        try:
+            offset = int(parts[1], 16)
+        except:
+            raise ValueError("Invalid offset from base:", parts[1])
+
+    if (base_offset + offset) < 0:
+        raise ValueError("Offset is negative")
+    return base_offset + offset
+
+
+def patch(args, base_offset):
+    """ Apply the args to patch the file
+
+    Returns False if it failed (optional) verification, True if it succeeded,
+    otherwise throws an exception.
+    """
+    try:
+        size = os.path.getsize(args.file)
+    except:
+        raise IOError("Can't get size of patch file")
+
+    with open(args.file, 'rb') as patch_file:
+        blob = bytearray(size)
+        patch_file.readinto(blob)
+
+    # Apply the patch
+    for offset, byte in enumerate(args.replace):
+        if args.xor_with:
+            blob[base_offset + offset] ^= byte
+        elif args.or_with:
+            blob[base_offset + offset] |= byte
+        elif args.and_with:
+            blob[base_offset + offset] &= byte
+        else:
+            blob[base_offset + offset] = byte
+
+    # Verify the patch (generally relevant only with "replace" mode)
+    if args.verify:
+        for offset, byte in enumerate(args.verify):
+            if blob[base_offset + offset] == byte:
+                error("Verification failed")
+                return False
+
+    # Write the file
+    with open(args.file, 'wb') as patch_file:
+        patch_file.write(blob)
+
+    print_to_error("Patched {0:d} bytes at 0x{1:x} in {2:s}".
+                   format(len(args.replace), base_offset, args.file))
+    return True
+
+
+def main():
+    """Patch a file"""
+
+    parser = argparse.ArgumentParser()
+
+    # String/file args
+    parser.add_argument("--file",
+                        help="The file to patch")
+
+    parser.add_argument("--map",
+                        help="The .map file which provides symbolic offsets")
+
+    parser.add_argument("--offset", "-f",
+                        help=OFFSET_HELP)
+
+    # Specify the altering bytes
+    parser.add_argument("replace",
+                        nargs='*',
+                        type=auto_int,
+                        help="New hex bytes with which to patch the file")
+
+    # Flags args
+    parser.add_argument("--xor_with", "-x",
+                        action='store_true',
+                        help="XOR the new bytes with the existing bytes")
+
+    parser.add_argument("--or_with", "-o",
+                        action='store_true',
+                        help="OR the new bytes with the existing bytes")
+
+    parser.add_argument("--and_with", "-a",
+                        action='store_true',
+                        help="AND the new bytes with the existing bytes")
+
+    # Specify the verification bytes
+    parser.add_argument("--verify", "-v",
+                        nargs='*',
+                        type=auto_int,
+                        help="Verify against the following old bytes (in hex)")
+
+    args = parser.parse_args()
+
+    # Sanity-check the arguments
+    if not validate_args(args):
+        error("Invalid args")
+        sys.exit(errno.EINVAL)
+
+    try:
+        patch(args, parse_offset(args.offset, args.map))
+    except:
+        error("Unable to patch file")
+        raise
+
+
+## Launch main
+#
+if __name__ == '__main__':
+    main()

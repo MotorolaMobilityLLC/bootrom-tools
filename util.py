@@ -37,14 +37,20 @@ PROGRAM_SUCCESS = 0
 PROGRAM_WARNINGS = 1
 PROGRAM_ERRORS = 2
 
+
 def warning(*objs):
-    """Print a warning message to stderr"""
-    print("WARNING: ", *objs, file=sys.stderr)
+    """Print a warning message to stderr, prefixed with 'WARNING'"""
+    print("WARNING:", *objs, file=sys.stderr)
 
 
 def error(*objs):
-    """Print an error message to stderr"""
-    print("ERROR: ", *objs, file=sys.stderr)
+    """Print an error message to stderr, prefixed with 'ERROR'"""
+    print("ERROR:", *objs, file=sys.stderr)
+
+
+def print_to_error(*objs):
+    """Print a message to stderr, unadorned"""
+    print(*objs, file=sys.stderr)
 
 
 def is_power_of_2(x):
