@@ -1,0 +1,142 @@
+#! /usr/bin/env python
+
+#
+# Copyright (c) 2015 Google Inc.
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+# 1. Redistributions of source code must retain the above copyright notice,
+# this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+# this list of conditions and the following disclaimer in the documentation
+# and/or other materials provided with the distribution.
+# 3. Neither the name of the copyright holder nor the names of its
+# contributors may be used to endorse or promote products derived from this
+# software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+# THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+# OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+# WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+# ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+
+## Tool to automatically download an image into the HAPS board and boot it
+#
+
+from __future__ import print_function
+import sys
+import argparse
+import errno
+from util import error
+from haps_boot import download_and_boot_haps
+
+# Program return values
+PROGRAM_SUCCESS = 0
+PROGRAM_WARNINGS = 1
+PROGRAM_ERRORS = 2
+
+# HAPS character timeout (1 second wait on characters, in 0.1 sec units)
+HAPS_CHAR_TIMEOUT = 10
+
+# HAPS boot timeout (~30 sec in character timeout counts)
+HAPS_BOOT_TIMEOUT_COUNT = 300
+
+JLINK_RESET_SCRIPT = "cmd-jlink-start-1"  # "cmd-jlink-start-1"
+JLINK_POST_RESET_SCRIPT = "cmd-jlink-start-2"  # "cmd-jlink-start-2"
+
+# e-Fuse settings
+efuses = {
+    "VID": 0x00000000,
+    "PID": 0x00000000,
+    "SN0": 0x00000000,
+    "SN1": 0x00000000,
+    "IMS0": 0x00000000,
+    "IMS1": 0x00000000,
+    "IMS2": 0x00000000,
+    "IMS3": 0x00000000,
+    "IMS4": 0x00000000,
+    "IMS5": 0x00000000,
+    "IMS6": 0x00000000,
+    "IMS7": 0x00000000,
+    "IMS8": 0x00000000}
+
+
+def normalize_tty_name(tty_name):
+    # Try to normalize lazy tty names
+    #
+    # Returns the normalized name
+    normalized_tty_name = tty_name
+    if tty_name.find("tty") == 0:
+        # convert "ttyXXX" to "/dev/ttyXXX"
+        normalized_tty_name = "/dev/" + tty_name
+    if tty_name.find("dev") == 0:
+        # convert "dev/ttyXXX" to "/dev/ttyXXX"
+        normalized_tty_name = "/" + tty_name
+    if normalized_tty_name.find("/dev/tty") != 0:
+        # so much for trying to "be nice" - give up
+        raise ValueError("Unknown tty: '{0:s}'".format(tty_name))
+    return normalized_tty_name
+
+
+def parse_efuse(eflags_name):
+    # Parse the eFuse file to override the default eFuse values
+    if eflags_name:
+        with open(eflags_name, "r") as fd:
+            for line in fd:
+                fields = line.split()
+                if fields:
+                    if fields[0] in efuses:
+                        efuses[fields[0]] = int(fields[1], 16)
+                    else:
+                        error("unknown e-Fuse:", fields[0])
+                        sys.exit(errno.EINVAL)
+
+
+def main():
+    """Mainline"""
+
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("--jlinksn",
+                        required=True,
+                        help="The JLink serial number")
+
+    parser.add_argument("--chipit",
+                        required=True,
+                        help="The name of the HAPS ChipIT supervisor tty")
+
+    parser.add_argument("--efuse",
+                        help="The pathname to the eFuse file")
+
+    parser.add_argument("--scripts",
+                        default="./",
+                        help="The pathname to the scripts folder")
+
+    parser.add_argument("--bin",
+                        required=True,
+                        help="The name of the bootrom file to download")
+
+    args = parser.parse_args()
+
+    args.chipit = normalize_tty_name(args.chipit)
+
+    # Override the eFuses with the supplied file
+    if args.efuse:
+        parse_efuse(args.efuse)
+
+    download_and_boot_haps(args.chipit, args.scripts, args.jlinksn, args.bin,
+                           efuses)
+
+
+## Launch main
+#
+if __name__ == '__main__':
+    main()
