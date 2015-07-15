@@ -1,0 +1,286 @@
+#! /usr/bin/env python
+
+#
+# Copyright (c) 2015 Google Inc.
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+# 1. Redistributions of source code must retain the above copyright notice,
+# this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+# this list of conditions and the following disclaimer in the documentation
+# and/or other materials provided with the distribution.
+# 3. Neither the name of the copyright holder nor the names of its
+# contributors may be used to endorse or promote products derived from this
+# software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+# THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+# OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+# WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+# ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+
+from __future__ import print_function
+import os
+import argparse
+import shlex
+from util import error, print_to_error
+import subprocess
+
+OFFSET_HELP = """The offset from the start of the file
+It may be specified as any of:
+    num
+    num+num
+    symbol
+    symbol+num
+(All numbers are in hex, 'symbol' requires --map)"""
+
+
+class open_rw_file_pair():
+    def __init__(self, file1, file2):
+        self.fn1 = file1
+        self.fn2 = file2
+
+    def __enter__(self):
+        self.f1 = open(self.fn1, 'r')
+        self.f2 = open(self.fn2, 'w')
+        return (self.f1, self.f2)
+
+    def __exit__(self, type, value, traceback):
+        self.f1.close()
+        self.f2.close()
+
+
+def auto_int(x):
+    # Workaround to allow hex numbers to be entered for numeric arguments
+    return int(x, 16)
+
+
+def validate_test_args(test_args):
+    """Sanity-check the test args and return an error string
+
+    Returns None if the args are valid, or a string if invalid.
+    """
+    # Check that there is exactly one file modification action
+    new_byte_modes = 0
+    if test_args.replace_with:
+        new_byte_modes += 1
+    if test_args.xor_with:
+        new_byte_modes += 1
+    if test_args.or_with:
+        new_byte_modes += 1
+    if test_args.and_with:
+        new_byte_modes += 1
+
+    if new_byte_modes < 1:
+        return "You must specify an action (-r, -x, -o, or -a)"
+    elif new_byte_modes > 1:
+        return "Only one of -r, -x, -o, or -a are allowed"
+
+    # Check that we have replacement bytes with which to alter the bin file
+    if not len(test_args.replacement_bytes):
+        return "No new bytes specified"
+
+    # Check that they have specified test criteria
+    if not test_args.pass_str and not test_args.fail_str:
+        return "you must have a pass or a fail string"
+
+    # Check that they haven't specified both pass and fail strings
+    if test_args.pass_str and test_args.fail_str:
+        return "you can't mix pass and fail strings"
+
+    # The line is valid
+    return None
+
+
+def write_test_term(f_test, tag, value):
+    # write a single "tag value" pair to the test file, quoting as needed
+    if (value.find(" ") != -1) or (value.find("\t") != -1):
+        f_test.write("{0:s} \"{1:s}\" ".format(tag, value))
+    else:
+        f_test.write("{0:s} {1:s} ".format(tag, value))
+
+
+def process_1_desc(test_args, f_test, test_path, bin_pathname,
+                   bin_file, map_pathname):
+    """Process a single test descriptor
+
+    From the parsed test_args, it will generate a 1-line entry in
+    the test file (using the f_test descriptor). It also generates
+    a modified <BootRom>.bin file, called <BootRom>-<TestName>.bin,
+    in the folder referenced by test_path. The map_pathanme, if
+    present, is passed on to hexpatch.
+    """
+    bf = bin_file.rsplit(".")
+    altered_bin_pathname = "{0:s}{1:s}-{2:s}.{3:s}".format(
+                           test_path, bf[0], test_args.testname, bf[1])
+
+    # Generate the altered bin file
+    # For now, simply shell out.
+    # TODO: make hexpatch a callable library
+    subprocess.call(["cp", bin_pathname, altered_bin_pathname])
+
+    cmdline = ["hexpatch", "--file", bin_pathname,
+               "--out", altered_bin_pathname,
+               "--offset", test_args.offset]
+    if map_pathname:
+        cmdline += ["--map",  map_pathname]
+    if test_args.xor_with:
+        cmdline += ["-x"]
+    elif test_args.or_with:
+        cmdline += ["-o"]
+    elif test_args.and_with:
+        cmdline += ["-a"]
+    # (There's no test for "replace" because that is hexpatch's default action)
+    for byte in test_args.replacement_bytes:
+        cmdline += ["{0:02x}".format(byte)]
+    subprocess.call(cmdline)
+
+    # Generate the test file entry
+    write_test_term(f_test, "-t", test_args.testname)
+    if test_args.description:
+        write_test_term(f_test, "-d", test_args.description)
+    write_test_term(f_test, "-bin", altered_bin_pathname)
+    if test_args.pass_str:
+        for str in test_args.pass_str:
+            write_test_term(f_test, "-p", str)
+    else:
+        for str in test_args.fail_str:
+            write_test_term(f_test, "-f", str)
+    f_test.write("\n")
+
+
+def process_desc_file(desc_pathname, map_pathname, bin_pathname,
+                      test_path, test_file):
+    """Process the test descriptor file
+
+    Processes the test descriptor file, generating an output .test file
+    in the folder referenced by test_path, and a set of modified
+    BootRom.bin files.
+    """
+    # Set up the test descriptor parser
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--testname", "-t",
+                        required=True,
+                        help="The test name")
+
+    parser.add_argument("--description", "-d",
+                        help="The test description")
+
+    parser.add_argument("--offset", "-z",
+                        required=True,
+                        help=OFFSET_HELP)
+
+    parser.add_argument("--pass_str", "-p",
+                        action="append",
+                        help="passing string")
+
+    parser.add_argument("--fail_str", "-f",
+                        action="append",
+                        help="failing string")
+
+    # Flags args
+    parser.add_argument("--replace_with", "-r",
+                        action='store_true',
+                        help="XOR the new bytes with the existing bytes")
+
+    parser.add_argument("--xor_with", "-x",
+                        action='store_true',
+                        help="XOR the new bytes with the existing bytes")
+
+    parser.add_argument("--or_with", "-o",
+                        action='store_true',
+                        help="OR the new bytes with the existing bytes")
+
+    parser.add_argument("--and_with", "-a",
+                        action='store_true',
+                        help="AND the new bytes with the existing bytes")
+
+    # Specify the altering bytes
+    parser.add_argument("replacement_bytes",
+                        nargs='*',
+                        type=auto_int,
+                        help="New hex bytes with which to patch the file")
+
+    # Create the test folder if needed
+    if not os.path.isdir(test_path):
+        os.makedirs(test_path)
+    test_pathname = test_path + test_file
+
+    # Split the bin_pathname into path and file name
+    index = bin_pathname.rfind("/") + 1
+    if index:
+        bin_file = bin_pathname[index:]
+    else:
+        bin_file = bin_pathname
+
+    # Now parse and process each line in the test descriptor file
+    with open_rw_file_pair(desc_pathname, test_pathname) as (f_desc, f_test):
+        line_num = 1
+        for line in f_desc:
+            # Chop each line into a list, stripping comments and
+            # preserving quoted strings
+            test_descriptor = shlex.split(line, True)
+            if test_descriptor:
+                test_args = parser.parse_args(test_descriptor)
+                error_string = validate_test_args(test_args)
+                if error_string:
+                    error("(line {0:d}) {1:s}:".format(line_num, error_string))
+                    print_to_error(line)
+                else:
+                    process_1_desc(test_args, f_test, test_path,
+                                   bin_pathname, bin_file, map_pathname)
+            line_num += 1
+
+
+def main():
+    """Generate a test file and set of altered BootRom.bin files"""
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--desc", "-d",
+                        required=True,
+                        help="The file containing the test descriptors")
+
+    parser.add_argument("--test", "-t",
+                        required=True,
+                        help="The output .test file")
+
+    parser.add_argument("--out_folder", "-o",
+                        default="./",
+                        help="The output folder for the test file and "
+                             "altered .bins")
+
+    parser.add_argument("--bin", "-b",
+                        required=True,
+                        help="The BootRom.bin pathname from which "
+                             "altered copies are made")
+
+    parser.add_argument("--map", "-m",
+                        help="The .map file which provides symbolic offsets")
+
+    args = parser.parse_args()
+
+    # Ensure that the output path ends in a slash for ease of concatenation
+    if args.out_folder[-1] != "/":
+        args.out_folder += "/"
+
+    try:
+        process_desc_file(args.desc, args.map, args.bin, args.out_folder,
+                          args.test)
+    except:
+        error("Unable to generate test file suite")
+        raise
+
+
+## Launch main
+#
+if __name__ == '__main__':
+    main()
