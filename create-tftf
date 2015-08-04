@@ -165,7 +165,7 @@ def main():
     Usage: create-tftf --load <num> --start <num> --out <file> \
            {--name <string>} {--unipro-mfg} {--unipro-pid} \
            {--ara-vid} {--ara-pid} \
-           {-v | --verbose} \
+           {-v | --verbose} {--map} \
            [<section_type> <file> {--offset <num>} {--skip <num>}]...
     Where:
         --load
@@ -186,6 +186,8 @@ def main():
             ARA product ID
         -v | --verbose
             Display the TFTF header and a synopsis of each TFTF section
+        --map
+            Create a map file of the TFTF header and each TFTF section
         <section_type>
             Specifies a file for a given type of section:
             --code        code section.
@@ -238,6 +240,10 @@ def main():
     parser.add_argument("-v", "--verbose",
                         action='store_true',
                         help="Dump the TFTF header when done")
+
+    parser.add_argument("--map", "-m",
+                        action='store_true',
+                        help="displays the field offsets")
 
     #parser.add_argument("--compress",
     #                    action='store_true',
@@ -339,6 +345,8 @@ def main():
     if args.verbose:
         tftf_header.display(args.out)
         tftf_header.display_data(args.out)
+    if args.map:
+        tftf_header.create_map_file(args.out, 0)
 
     print("Done")
 

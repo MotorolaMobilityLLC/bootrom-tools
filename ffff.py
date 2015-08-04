@@ -38,7 +38,12 @@ from ffff_element import FFFF_HDR_LENGTH, FFFF_HDR_VALID, \
     FFFF_HDR_OFF_FLASH_CAPACITY, FFFF_FLASH_IMAGE_NAME_LENGTH, \
     FFFF_ELEMENT_END_OF_ELEMENT_TABLE, FFFF_HEADER_COLLISION, \
     FFFF_HDR_ERASED, FFFF_SENTINEL, \
-    FFFF_HDR_INVALID
+    FFFF_HDR_INVALID, FFFF_HDR_OFF_PADDING, FFFF_HDR_OFF_SENTINEL, \
+    FFFF_HDR_OFF_TIMESTAMP, FFFF_HDR_OFF_ERASE_BLOCK_SIZE, \
+    FFFF_HDR_OFF_HDR_BLOCK_SIZE, FFFF_HDR_OFF_FLASH_IMAGE_LENGTH, \
+    FFFF_HDR_OFF_HEADER_GENERATION_NUM, FFFF_ELT_OFF_TYPE, FFFF_ELT_OFF_ID, \
+    FFFF_ELT_OFF_GENERATION, FFFF_ELT_OFF_LOCATION, \
+    FFFF_ELT_OFF_LENGTH
 import sys
 
 from util import error, is_power_of_2, next_boundary, is_constant_fill, \
@@ -485,3 +490,67 @@ class Ffff:
             else:
                 self.display_element_data(header_index)
         print(" ")
+
+    def write_map(self, wf, base_offset, prefix=""):
+        """Display the field names and offsets of a single FFFF header"""
+        # Add the symbol for the start of this header
+        if prefix:
+            wf.write("{0:s}  {1:08x}\n".format(prefix, base_offset))
+            prefix += "."
+
+        # Add the header fields
+        wf.write("{0:s}sentinel  {1:08x}\n".
+                 format(prefix, base_offset + FFFF_HDR_OFF_SENTINEL))
+        wf.write("{0:s}time_stamp  {1:08x}\n".
+                 format(prefix, base_offset + FFFF_HDR_OFF_TIMESTAMP))
+        wf.write("{0:s}image_name  {1:08x}\n".
+                 format(prefix, base_offset + FFFF_HDR_OFF_FLASH_IMAGE_NAME))
+        wf.write("{0:s}flash_capacity  {1:08x}\n".
+                 format(prefix, base_offset + FFFF_HDR_OFF_FLASH_CAPACITY))
+        wf.write("{0:s}erase_block_size  {1:08x}\n".
+                 format(prefix, base_offset + FFFF_HDR_OFF_ERASE_BLOCK_SIZE))
+        wf.write("{0:s}header_size  {1:08x}\n".
+                 format(prefix, base_offset + FFFF_HDR_OFF_HDR_BLOCK_SIZE))
+        wf.write("{0:s}image_length  {1:08x}\n".
+                 format(prefix,
+                        base_offset + FFFF_HDR_OFF_FLASH_IMAGE_LENGTH))
+        wf.write("{0:s}generation_num  {1:08x}\n".
+                 format(prefix,
+                        base_offset + FFFF_HDR_OFF_HEADER_GENERATION_NUM))
+
+        # Add the element table
+        wf.write("{0:s}element_table  {1:08x}\n".
+                 format(prefix, base_offset + FFFF_HDR_OFF_ELEMENT_TBL))
+        element_offset = base_offset + FFFF_HDR_OFF_ELEMENT_TBL
+        for index in range(FFFF_MAX_ELEMENTS):
+            wf.write("{0:s}element[{1:d}].type  {2:08x}\n".
+                     format(prefix, index,
+                            element_offset + FFFF_ELT_OFF_TYPE))
+            wf.write("{0:s}element[{1:d}].id  {2:08x}\n".
+                     format(prefix, index,
+                            element_offset + FFFF_ELT_OFF_ID))
+            wf.write("{0:s}element[{1:d}].generation_no  {2:08x}\n".
+                     format(prefix, index,
+                            element_offset + FFFF_ELT_OFF_GENERATION))
+            wf.write("{0:s}element[{1:d}].location  {2:08x}\n".
+                     format(prefix, index,
+                            element_offset + FFFF_ELT_OFF_LOCATION))
+            wf.write("{0:s}element[{1:d}].length  {2:08x}\n".
+                     format(prefix, index,
+                            element_offset + FFFF_ELT_OFF_LENGTH))
+            element_offset += FFFF_ELT_LENGTH
+
+        # Add the padding and tail sentinel
+        wf.write("{0:s}padding  {1:08x}\n".
+                 format(prefix, base_offset + FFFF_HDR_OFF_PADDING))
+        wf.write("{0:s}tail_sentinel  {1:08x}\n".
+                 format(prefix, base_offset + FFFF_HDR_OFF_TAIL_SENTINEL))
+
+    def write_map_elements(self, wf, base_offset, prefix=""):
+        """Display the field names and offsets of a single FFFF header"""
+        # Add the symbol for the start of this header
+        if prefix:
+            prefix += "."
+        # Dump the element starts
+        for index, element in enumerate(self.elements):
+            element.write_map_payload(wf, 0, prefix)

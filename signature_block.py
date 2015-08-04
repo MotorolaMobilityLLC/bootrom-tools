@@ -52,6 +52,25 @@ tftf_signature_names = {TFTF_SIGNATURE_TYPE_RSA_2048_SHA_256:
                         "rsa2048-sha256"}
 
 
+def signature_block_write_map(wf, base_offset, prefix=""):
+    """Display the field names and offsets of a single TFTF header"""
+    # Add the symbol for the start of this header
+    if prefix:
+        wf.write("{0:s} {1:08x}\n".
+                 format(prefix, base_offset))
+        prefix += "."
+
+    # Add the header fields
+    wf.write("{0:s}length  {1:08x}\n".
+             format(prefix, base_offset + TFTF_SIGNATURE_OFF_LENGTH))
+    wf.write("{0:s}type  {1:08x}\n".
+             format(prefix, base_offset + TFTF_SIGNATURE_OFF_TYPE))
+    wf.write("{0:s}key_name  {1:08x}\n".
+             format(prefix, base_offset + TFTF_SIGNATURE_OFF_KEY_NAME))
+    wf.write("{0:s}key_signature  {1:08x}\n".
+             format(prefix, base_offset + TFTF_SIGNATURE_OFF_KEY_SIGNATURE))
+
+
 def get_key_type(key_type_string):
     """convert a string into a key_type
 

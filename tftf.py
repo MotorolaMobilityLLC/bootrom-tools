@@ -35,6 +35,7 @@ from struct import pack_into, unpack_from
 from string import rfind
 from time import gmtime, strftime
 from util import display_binary_data, error
+from signature_block import signature_block_write_map
 
 # TFTF section types
 TFTF_SECTION_TYPE_RESERVED = 0x00
@@ -85,7 +86,21 @@ TFTF_HDR_OFF_SENTINEL = 0x00
 TFTF_HDR_OFF_TIMESTAMP = 0x04
 TFTF_HDR_OFF_NAME = 0x14
 TFTF_HDR_OFF_LENGTH = 0x44
+TFTF_HDR_OFF_LOAD_BASE = 0x48
+TFTF_HDR_OFF_EXPANDED_LENGTH = 0x4c
+TFTF_HDR_OFF_START_LOCATION = 0x50
+TFTF_HDR_OFF_UNIPRO_MFGR_ID = 0x54
+TFTF_HDR_OFF_UNIPRO_PRODUCT_ID = 0x58
+TFTF_HDR_OFF_ARA_VENDOR_ID = 0x5c
+TFTF_HDR_OFF_ARA_PRODUCT_ID = 0x60
 TFTF_HDR_OFF_SECTIONS = 0x64  # Start of sections array
+TFTF_HDR_OFF_PADDING = (TFTF_HDR_LENGTH - TFTF_PADDING)
+
+# Offsets within a TFTF section descriptor
+TFTF_SECTION_OFF_LENGTH = 0x00
+TFTF_SECTION_OFF_EXPANDED_LENGTH = 0x04
+TFTF_SECTION_OFF_COPY_OFFSET = 0x08
+TFTF_SECTION_OFF_SECTION_TYPE = 0x0c
 
 
 # TFTF Signature Block layout
@@ -126,6 +141,18 @@ section_names = {
     TFTF_SECTION_TYPE_SIGNATURE: "Signature",
     TFTF_SECTION_TYPE_CERTIFICATE: "Certificate",
     TFTF_SECTION_TYPE_END_OF_DESCRIPTORS: "End of descriptors",
+}
+
+section_short_names = {
+    TFTF_SECTION_TYPE_RESERVED: "reserved",
+    TFTF_SECTION_TYPE_RAW_CODE: "code",
+    TFTF_SECTION_TYPE_RAW_DATA: "data",
+    TFTF_SECTION_TYPE_COMPRESSED_CODE: "compressed_code",
+    TFTF_SECTION_TYPE_COMPRESSED_DATA: "compressed_data",
+    TFTF_SECTION_TYPE_MANIFEST: "manifest",
+    TFTF_SECTION_TYPE_SIGNATURE: "signature",
+    TFTF_SECTION_TYPE_CERTIFICATE: "certificate",
+    TFTF_SECTION_TYPE_END_OF_DESCRIPTORS: "eot",
 }
 
 
@@ -200,6 +227,14 @@ class TftfSection:
 
         if section_type in section_names:
             return section_names[section_type]
+        else:
+            return "?"
+
+    def section_short_name(self, section_type):
+        # Convert a section type into textual form
+
+        if section_type in section_short_names:
+            return section_short_names[section_type]
         else:
             return "?"
 
@@ -327,6 +362,7 @@ class Tftf:
                 rf.readinto(self.tftf_buf)
                 rf.close()
                 self.unpack()
+                self.post_process()
         return success
 
     def load_tftf_from_buffer(self, buf):
@@ -729,3 +765,88 @@ class Tftf:
         for index, section in enumerate(self.sections):
             slice_end += section.section_length
         return self.tftf_buf[TFTF_HDR_LENGTH:slice_end]
+
+    def create_map_file(self, base_name, base_offset, prefix=""):
+        """Create a map file from the base name
+
+        Create a map file from the base name substituting or adding ".map"
+        as the file extension, and write out the offsets for the TFTF fields.
+        """
+        index = base_name.rindex(".")
+        if index != -1:
+            base_name = base_name[:index]
+        map_name = base_name + ".map"
+        try:
+            with open(map_name, 'w') as mapfile:
+                self.write_map(mapfile, base_offset, prefix)
+        except:
+            error("Unable to write", map_name)
+            return False
+
+    def write_map(self, wf, base_offset, prefix=""):
+        """Display the field names and offsets of a single TFTF header"""
+        # Add the symbol for the start of this header
+        if prefix:
+            wf.write("{0:s} {1:08x}\n".format(prefix, base_offset))
+            prefix += "."
+
+        # Add the header fields
+        wf.write("{0:s}sentinel  {1:08x}\n".
+                 format(prefix, base_offset + TFTF_HDR_OFF_SENTINEL))
+        wf.write("{0:s}timestamp  {1:08x}\n".
+                 format(prefix, base_offset + TFTF_HDR_OFF_TIMESTAMP))
+        wf.write("{0:s}firmware_name  {1:08x}\n".
+                 format(prefix, base_offset + TFTF_HDR_OFF_NAME))
+        wf.write("{0:s}load_length  {1:08x}\n".
+                 format(prefix, base_offset + TFTF_HDR_OFF_LENGTH))
+        wf.write("{0:s}load_base  {1:08x}\n".
+                 format(prefix, base_offset + TFTF_HDR_OFF_LOAD_BASE))
+        wf.write("{0:s}expanded_length  {1:08x}\n".
+                 format(prefix, base_offset + TFTF_HDR_OFF_EXPANDED_LENGTH))
+        wf.write("{0:s}star_location  {1:08x}\n".
+                 format(prefix, base_offset + TFTF_HDR_OFF_START_LOCATION))
+        wf.write("{0:s}unipro_mfgr_id  {1:08x}\n".
+                 format(prefix, base_offset + TFTF_HDR_OFF_UNIPRO_MFGR_ID))
+        wf.write("{0:s}unipro_product_id  {1:08x}\n".
+                 format(prefix, base_offset + TFTF_HDR_OFF_UNIPRO_PRODUCT_ID))
+        wf.write("{0:s}ara_vendor_id  {1:08x}\n".
+                 format(prefix, base_offset + TFTF_HDR_OFF_ARA_VENDOR_ID))
+        wf.write("{0:s}ara_producgt_id  {1:08x}\n".
+                 format(prefix, base_offset + TFTF_HDR_OFF_ARA_PRODUCT_ID))
+
+        # Dump the section descriptors (used and free)
+        section_offset = base_offset + TFTF_HDR_OFF_SECTIONS
+        for index in range(TFTF_MAX_SECTIONS):
+            wf.write("{0:s}section[{1:d}].section_length  {2:08x}\n".
+                     format(prefix, index,
+                            section_offset + TFTF_SECTION_OFF_LENGTH))
+            wf.write("{0:s}section[{1:d}].expanded_length  {2:08x}\n".
+                     format(prefix, index,
+                            section_offset + TFTF_SECTION_OFF_EXPANDED_LENGTH))
+            wf.write("{0:s}section[{1:d}].copy_offset  {2:08x}\n".
+                     format(prefix, index,
+                            section_offset + TFTF_SECTION_OFF_COPY_OFFSET))
+            wf.write("{0:s}section[{1:d}].type  {2:08x}\n".
+                     format(prefix, index,
+                            section_offset + TFTF_SECTION_OFF_SECTION_TYPE))
+            section_offset += TFTF_SECTION_HDR_LENGTH
+
+        # Dump the padding (the remainder of the TFTF header
+        wf.write("{0:s}padding  {1:08x}\n".
+                 format(prefix, base_offset + TFTF_HDR_OFF_PADDING))
+
+        # Dump the section starts
+        base_offset += TFTF_HDR_LENGTH
+        for index, section in enumerate(self.sections):
+            sn_name = "{0:s}section[{1:d}].{2:s}".\
+                      format(prefix, index,
+                             section.section_short_name(section.section_type))
+            # If we know the structure of the section, dump the map for that
+            if section.section_type == TFTF_SECTION_TYPE_END_OF_DESCRIPTORS:
+                break
+            elif section.section_type == TFTF_SECTION_TYPE_SIGNATURE:
+                signature_block_write_map(wf, base_offset, sn_name)
+            else:
+            # Otherwise, just describe it generically
+                wf.write("{0:s}  {1:08x}\n".format(sn_name, base_offset))
+            base_offset += section.section_length

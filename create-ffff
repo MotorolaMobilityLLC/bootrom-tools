@@ -224,7 +224,7 @@ def main():
     This is covered in detail in "ES3 Bridge ASIC Boot ROM High Level Design".
 
     Usage: create-ffff --fc <num> --ebs <num> --length <num> --gen <num> \
-           --out <file> {--name <string>} {-v | --verbose} \
+           --out <file> {--name <string>} {-v | --verbose} {--map} \
            [<element_type> <file> <element_option>]...
     Where:
         --fc | --flash-capacity
@@ -242,6 +242,8 @@ def main():
             Flash image name
         -v | --verbose
             Display the TFTF header and a synopsis of each TFTF section
+        --map
+            Create a map file of the FFFF headers and each TFTF sections
         <element_type>
             Specifies a file for a given type of element:
             --s2f | --stage-2-fw
@@ -318,6 +320,10 @@ def main():
                         action='store_true',
                         help="Dump the FFFFS header when done")
 
+    parser.add_argument("--map", "-v",
+                        action='store_true',
+                        help="displays the field offsets")
+
     # String/file args
     parser.add_argument("--name",
                         help="The firmware package name")
@@ -388,6 +394,8 @@ def main():
     # Optionally display the header info
     if args.verbose:
         ffff_romimage.display(args.out)
+    if args.map:
+        ffff_romimage.create_map_file(args.out, 0)
 
     print("done")
 

@@ -92,6 +92,15 @@ FFFF_HDR_VALID = 0
 FFFF_HDR_ERASED = 1
 FFFF_HDR_INVALID = 2
 
+element_short_names = {
+    FFFF_ELEMENT_END_OF_ELEMENT_TABLE: "eot",
+    FFFF_ELEMENT_STAGE2_FIRMWARE_PACKAGE: "2fw",
+    FFFF_ELEMENT_STAGE3_FIRMWARE_PACKAGE: "3fw",
+    FFFF_ELEMENT_IMS_CERTIFICATE: "ims_cert",
+    FFFF_ELEMENT_CMS_CERTIFICATE: "cms_cert",
+    FFFF_ELEMENT_DATA: "data",
+}
+
 
 # FFFF Element representation
 #
@@ -150,9 +159,8 @@ class FfffElement:
                 # not just the TFTF's "load_length" or "expanded_length".
                 self.element_length = self.tftf_blob.tftf_length
             else:
-                error("Bad TFTF file:", self.filename)
-                success = False
-        return success
+                raise ValueError("Bad TFTF file:", self.filename)
+        return True
 
     def unpack(self, buf, offset):
         """Unpack an element header from an FFFF header buffer
@@ -253,20 +261,15 @@ class FfffElement:
         """Write an element to a file
 
         Write the FFFF element from the FFFF buffer as a binary blob to
-        the specified file and return a success flag.
+        the specified file.
         """
 
-        try:
-            # Output the entire FFFF element blob (less padding)
-            with open(filename, 'wb') as wf:
-                wf.write(self.buf[self.element_location:
-                                  self.element_location +
-                                  self.element_length])
-                print("Wrote", filename)
-                return True
-        except:
-            error("Failed to write", filename)
-            return False
+        # Output the entire FFFF element blob (less padding)
+        with open(filename, 'wb') as wf:
+            wf.write(self.buf[self.element_location:
+                              self.element_location +
+                              self.element_length])
+            print("Wrote", filename)
 
     def element_name(self, element_type):
         # Convert an element type into textual form
@@ -286,6 +289,11 @@ class FfffElement:
         else:
             name = "?"
         return name
+
+    def element_short_name(self, element_type):
+        # Convert an element type into textual form
+        if element_type in element_short_names:
+            return element_short_names[element_type]
 
     def display_table_header(self):
         # Print the element table column names
@@ -341,3 +349,18 @@ class FfffElement:
 
         self.tftf_blob.display("element [{0:d}]".format(self.index), "  ")
         self.tftf_blob.display_data("element [{0:d}]".format(self.index), "  ")
+
+    def write_map_payload(self, wf,  base_offset, prefix=""):
+        """Display the field names and offsets of a single FFFF header"""
+        elt_name = "{0:s}element[{1:d}].{2:s}".\
+                   format(prefix, self.index,
+                          self.element_short_name(self.element_type))
+
+        # Dump the element starts
+        if self.tftf_blob:
+            # We've got a TFTF, pass that on to TFTF to display
+            self.tftf_blob.write_map(wf, self.element_location, elt_name)
+        else:
+            # Just print the element payload location
+            wf.write("{0:s}  {1:08x}\n".
+                     format(prefix, self.element_location))
