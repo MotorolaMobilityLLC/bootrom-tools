@@ -108,14 +108,17 @@ class ElfFileAction(argparse.Action):
                 image = ELFFile(elf_file)
                 elf_sections = []
                 code_section = image.get_section_by_name('.text')
-                namespace.load = code_section['sh_addr']
-                elf_sections.append({'type': TFTF_SECTION_TYPE_RAW_CODE,
-                                     'addr': code_section['sh_addr'],
-                                     'buffer': code_section.data()})
+                if code_section:
+                    namespace.load = code_section['sh_addr']
+                    elf_sections.append({'type': TFTF_SECTION_TYPE_RAW_CODE,
+                                        'addr': code_section['sh_addr'],
+                                        'buffer': code_section.data()})
                 data_section = image.get_section_by_name('.data')
-                elf_sections.append({'type': TFTF_SECTION_TYPE_RAW_DATA,
-                                     'addr': data_section['sh_addr'],
-                                     'buffer': data_section.data()})
+                if data_section:
+                    elf_sections.append({'type': TFTF_SECTION_TYPE_RAW_DATA,
+                                        'addr': data_section['sh_addr'],
+                                        'buffer': data_section.data()})
+                assert(code_section is not None or data_section is not None)
                 sections += elf_sections
                 namespace.start = image['e_entry']
         except IOError as e:
