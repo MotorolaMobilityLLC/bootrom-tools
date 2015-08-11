@@ -763,6 +763,8 @@ class Tftf:
         self.pack()
         slice_end = TFTF_HDR_LENGTH
         for index, section in enumerate(self.sections):
+            if index >= section_index:
+                break
             slice_end += section.section_length
         return self.tftf_buf[TFTF_HDR_LENGTH:slice_end]
 
