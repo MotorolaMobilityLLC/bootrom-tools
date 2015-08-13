@@ -320,7 +320,7 @@ def main():
                         action='store_true',
                         help="Dump the FFFFS header when done")
 
-    parser.add_argument("--map", "-v",
+    parser.add_argument("--map", "-m",
                         action='store_true',
                         help="displays the field offsets")
 
