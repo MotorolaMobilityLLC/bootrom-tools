@@ -185,11 +185,13 @@ def patch(args, base_offset):
                 return False
 
     # Write the file
-    with open(args.file, 'wb') as patch_file:
+    if not args.out:
+        args.out = args.file
+    with open(args.out, 'wb') as patch_file:
         patch_file.write(blob)
 
     print_to_error("Patched {0:d} bytes at 0x{1:x} in {2:s}".
-                   format(len(args.replace), base_offset, args.file))
+                   format(len(args.replace), base_offset, args.out))
     return True
 
 
@@ -200,10 +202,14 @@ def main():
 
     # String/file args
     parser.add_argument("--file",
-                        help="The file to patch")
+                        required=True,
+                        help="The input file to patch")
 
     parser.add_argument("--map",
                         help="The .map file which provides symbolic offsets")
+
+    parser.add_argument("--out",
+                        help="The output file (default: --file")
 
     parser.add_argument("--offset", "-f",
                         help=OFFSET_HELP)
