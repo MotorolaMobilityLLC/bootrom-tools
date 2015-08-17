@@ -32,23 +32,17 @@
 #
 
 from __future__ import print_function
-import sys
 import os
-import termios
-import fcntl
 import subprocess
-from util import error
-
-# Program return values
-PROGRAM_SUCCESS = 0
-PROGRAM_WARNINGS = 1
-PROGRAM_ERRORS = 2
+import serial
+import Adafruit_GPIO as GPIO
+import Adafruit_GPIO.FT232H as FT232H
 
 # HAPS character timeout (1 second wait on characters, in 0.1 sec units)
 HAPS_CHAR_TIMEOUT = 10
 
 # HAPS boot timeout (~30 sec in character timeout counts)
-HAPS_BOOT_TIMEOUT_COUNT = 300
+HAPS_BOOT_TIMEOUT_COUNT = 30
 
 JLINK_RESET_SCRIPT = "cmd-jlink-start-1"  # "cmd-jlink-start-1"
 JLINK_POST_RESET_SCRIPT = "cmd-jlink-start-2"  # "cmd-jlink-start-2"
@@ -69,17 +63,67 @@ efuses = {
     "IMS7": 0x00000000,
     "IMS8": 0x00000000}
 
+# AdaFruit FT232H GPIO pins.
+# Pins 0 to 7  = D0 to D7.
+# Pins 8 to 15 = C0 to C7.
+#
+#                |<----- MPSSE ----->|
+# Pin Signal GPIO UART  SPI     I2C
+# --- ------ ---- ----  ---     ---
+# J1.1  +5V  -    -     -       -
+# J1.2  Gnd  -    -     -       -
+# J1.3  D0   0    TxD   ClkOut  SCL
+# J1.4  D1   1    RxD   MOSI    \_ SDA
+# J1.5  D2   2    RTS#  MISO    /
+# J1.6  D3   3    CTS#  SelOut
+# J1.7  D4   4    DTR#
+# J1.8  D5   5    DSR#
+# J1.9  D6   6    DCD#
+# J1.10 D7   7    RI#
+#
+# J2.1  C0   8
+# J2.2  C1   9
+# J2.3  C2   10
+# J2.4  C3   11
+# J2.5  C4   12
+# J2.6  C5   13
+# J2.7  C6   14
+# J2.8  C7*  15
+# J2.9  C8** -    -     -       -
+# J2.10 C9** -    -     -       -
+#
+# * C7 connected to voltage divider
+# ** C8, C9 drive red, green LEDs respectively
+
+# The daughterboard reset line has a pull-up to 3v3. The "operate" position
+# of switch DW1.4 is "ON" which shorts it to ground (i.e., "Run" = Low,
+# "Reset" = high). Even though the FT232H can nominally drive the IO to 3v3,
+# it would be better to instead simply tristate the IO and let the pull-up
+# do the work.
+
+# Daughterboard reset GPIO.
+# Note: To simplify wiring, we use an IO pin on the connector having a
+# ground pin
+SPIROM_RESET_GPIO = 0
+
+# Global to note that the Adafruit GPIO adapter has been initialized
+adafruit_initialized = False
+
+# Reset mechanisms
+RESET_MANUAL = 0
+RESET_FT232H = 1
+reset_mode = RESET_FT232H
+
+ft232h = None
+
 
 def create_jlink_scripts(script_path, binfile, efuses):
-    if script_path[-1] != "/":
-        script_path += "/"
-
-    with open(script_path + JLINK_RESET_SCRIPT, "w") as fd:
+    with open(os.path.join(script_path, JLINK_RESET_SCRIPT), "w") as fd:
         fd.write("w4 0xE000EDFC 0x01000001\n")
         fd.write("w4 0x40000100 0x1\n")
         fd.write("q\n")
 
-    with open(script_path + JLINK_POST_RESET_SCRIPT, "w") as fd:
+    with open(os.path.join(script_path, JLINK_POST_RESET_SCRIPT), "w") as fd:
         fd.write("halt\n")
         fd.write("loadbin {0:s} 0x00000000\n".format(binfile))
         fd.write("w4 0xE000EDFC 0x01000000\n")
@@ -105,32 +149,19 @@ def create_jlink_scripts(script_path, binfile, efuses):
         fd.write("w4 0x4008411c 0x{0:08x}\n".format(efuses["IMS7"]))
         fd.write("w4 0x40084120 0x{0:08x}\n".format(efuses["IMS8"]))
 
-# Pulse the Cortex reset
+        # Pulse the Cortex reset
         fd.write("w4 0x40000000 0x1\n")
         fd.write("w4 0x40000100 0x1\n")
         fd.write("q\n")
 
 
-def hit_any_key(prompt):
-    oldterm = termios.tcgetattr(sys.stdin)
-    newattr = termios.tcgetattr(sys.stdin)
-    newattr[3] = newattr[3] & ~termios.ICANON & ~termios.ECHO
-    termios.tcsetattr(sys.stdin, termios.TCSANOW, newattr)
-
-    oldflags = fcntl.fcntl(sys.stdin, fcntl.F_GETFL)
-    fcntl.fcntl(sys.stdin, fcntl.F_SETFL, oldflags | os.O_NONBLOCK)
-
-    sys.stdout.write(prompt)
-    try:
-        while 1:
-            try:
-                sys.stdin.read(1)
-                break
-            except IOError:
-                pass
-    finally:
-        termios.tcsetattr(sys.stdin, termios.TCSAFLUSH, oldterm)
-        fcntl.fcntl(sys.stdin, fcntl.F_SETFL, oldflags)
+def remove_jlink_scripts(script_path):
+    fname = os.path.join(script_path, JLINK_RESET_SCRIPT)
+    if os.path.isfile(fname):
+        os.remove(fname)
+    fname = os.path.join(script_path, JLINK_POST_RESET_SCRIPT)
+    if os.path.isfile(fname):
+        os.remove(fname)
 
 
 def haps_board_ready(chipit_name):
@@ -141,19 +172,9 @@ def haps_board_ready(chipit_name):
     # Returns True when synchronized, False if not
     have_prompt = False
     issued_boot_msg = False
-    with open(chipit_name, 'r+') as chipit:
-        # Config the ChipIt serial port
-        oldattrs = termios.tcgetattr(chipit)
-        newattrs = termios.tcgetattr(chipit)
-        # Apply new settings
 
-        newattrs[4] = termios.B230400  # ispeed
-        newattrs[5] = termios.B230400  # ospeed
-        newattrs[3] = newattrs[3] & ~termios.ICANON & ~termios.ECHO
-        newattrs[6][termios.VMIN] = 0
-        newattrs[6][termios.VTIME] = 10
-        termios.tcsetattr(chipit, termios.TCSANOW, newattrs)
-
+    with serial.Serial(chipit_name, 230400, serial.EIGHTBITS,
+                       serial.PARITY_NONE, serial.STOPBITS_ONE, 1) as chipit:
         # Scan TTY for the "HAPS62>" prompt
         num_timeouts = 0
         num_attempts = 0
@@ -182,7 +203,7 @@ def haps_board_ready(chipit_name):
                             # purge the buffer
                             buffer = ""
                             if not issued_boot_msg:
-                                print("HAPS is booting...")
+                                print("Waiting for HAPS...")
                                 issued_boot_msg = True
                     else:
                         # Read timed out
@@ -196,73 +217,124 @@ def haps_board_ready(chipit_name):
                             break
         except IOError:
             pass
-        finally:
-            # Restore previous settings
-            termios.tcsetattr(chipit, termios.TCSAFLUSH, oldattrs)
         return have_prompt
 
 
-def reset_spirom_daughterboard(apply_reset):
+def init_adafruit_ft232h():
     # Apply or remove the reset from the SPIROM daughterboard
-    # NOTE: Manual version
+    # via a GPIO on the AdaFruit FT232H SPI/I2C/UART/GPIO breakout board.
+    global ft232h, adafruit_initialized
+
+    if not adafruit_initialized:
+        # Temporarily disable the built-in FTDI serial driver on Mac & Linux
+        # platforms.
+        FT232H.use_FT232H()
+
+        # Create an FT232H object that grabs the first available FT232H device
+        # found.
+        ft232h = FT232H.FT232H()
+
+        # The daughterboard reset line has a pull-up to 3v3. The "operate"
+        # position of switch DW1.4 is "ON" which shorts it to ground (i.e.,
+        # "Run" = Low, "Reset" = high). Even though the FT232H can nominally
+        # drive the IO to 3v3, it would be better to instead simply tristate
+        # the IO and let the pull-up do the work.
+        # For initialization, we'll drive it low.
+        ft232h.setup(SPIROM_RESET_GPIO, GPIO.OUT)
+
+        ft232h.output(SPIROM_RESET_GPIO, GPIO.LOW)
+
+        # Note that we're now initialized
+        adafruit_initialized = True
+
+
+def reset_spirom_daughterboard_adafruit_ft232h(apply_reset):
+    # Apply or remove the reset from the SPIROM daughterboard
+    # via a GPIO on the AdaFruit FT232H SPI/I2C/UART/GPIO breakout board.
+    global ft232h, adafruit_initialized
+    if not adafruit_initialized:
+        init_adafruit_ft232h()
+
     if apply_reset:
-        print("set DW1.4 to the 'OFF' position")
+        # For "Reset", configure as input and let daughterboard pull-up
+        # drive the line high.
+        ft232h.setup(SPIROM_RESET_GPIO, GPIO.IN)
     else:
-        print("set DW1.4 to the 'ON' position")
-    hit_any_key("Press any key when done")
+        # For "Run", configure as an output and drive low
+        ft232h.setup(SPIROM_RESET_GPIO, GPIO.OUT)
+        ft232h.output(SPIROM_RESET_GPIO, GPIO.LOW)
 
 
-def jtag_reset_phase(jlink_serial_no, script_path):
-    # JTAG sequence to be applied to the SPIROM daugherboard (reset)
-    script_path += JLINK_RESET_SCRIPT
-
-    # Apply the reset and run the JTAG script
-    reset_spirom_daughterboard(True)
-    subprocess.call(["JLinkExe", "-SelectEmuBySN", jlink_serial_no,
-                     "-CommanderScript", script_path])
-
-
-def jtag_post_reset_phase(jlink_serial_no, script_path):
-    # JTAG sequence to be applied to the SPIROM daugherboard (no reset)
-    script_path += JLINK_POST_RESET_SCRIPT
-
-    # Remove the reset and run the JTAG script
-    reset_spirom_daughterboard(False)
-    subprocess.call(["JLinkExe", "-SelectEmuBySN", jlink_serial_no,
-                     "-CommanderScript", script_path])
+def reset_spirom_daughterboard_manual(apply_reset):
+    # Apply or remove the reset from the SPIROM daughterboard
+    # by prompting the user to manipulate the daughterboard
+    # reset switch.
+    if apply_reset:
+        raw_input("set DW1.4 to the 'OFF' position and press Return")
+    else:
+        raw_input("set DW1.4 to the 'ON' position and press Return")
 
 
-def download_and_boot_haps(chipit_tty, script_path, jlink_sn,
+def reset_spirom_daughterboard(apply_reset, reset_mode):
+    # Apply or remove the reset from the SPIROM daughterboard
+    if reset_mode == RESET_MANUAL:
+        reset_spirom_daughterboard_manual(apply_reset)
+    elif reset_mode == RESET_FT232H:
+        reset_spirom_daughterboard_adafruit_ft232h(apply_reset)
+    else:
+        raise ValueError("unknown daughterboard reset mode:", reset_mode)
+
+
+def jtag_reset_phase(jlink_serial_no, script_path, reset_mode):
+    # Apply the reset and run the "during-reset" JTAG script
+    # (JLINK_RESET_SCRIPT)
+    # NB. Current version of JLinkExe doesn't return non-zero status on error,
+    # so "check_call" is there for future releases.
+    reset_spirom_daughterboard(True, reset_mode)
+    subprocess.check_call(["JLinkExe", "-SelectEmuBySN", jlink_serial_no,
+                          "-CommanderScript",
+                          os.path.join(script_path, JLINK_RESET_SCRIPT)])
+
+
+def jtag_post_reset_phase(jlink_serial_no, script_path, reset_mode):
+    # Remove the reset and run the "post-reset" JTAG script
+    # (JLINK_POST_RESET_SCRIPT)
+    # NB. Current version of JLinkExe doesn't return non-zero status on error,
+    # so "check_call" is there for future releases.
+    reset_spirom_daughterboard(False, reset_mode)
+    subprocess.check_call(["JLinkExe", "-SelectEmuBySN", jlink_serial_no,
+                          "-CommanderScript",
+                          os.path.join(script_path, JLINK_POST_RESET_SCRIPT)])
+
+
+def download_and_boot_haps(chipit_tty, script_path, jlink_sn, reset_mode,
                            bootrom_image_pathname, efuses):
     """ Wait for HAPS board readiness, then download and run a BootRom image.
 
     chipit_tty: typically "/dev/ttyUSBx"
-    script_path: The path to where the JLink scripts will be written (ideally
-                 ending in a "/")
+    script_path: The path to where the JLink scripts will be written
     jlink_sn: The serial number of the JLink JTAG module (found on the bottom)
     bootrom_image_pathname: absolute or relative pathname to the BootRom.bin
                             file ("~" is not allowed)
     efuses: A list of eFuse names and values to write (see the global "efuses")
 
-    Returns True on success, False on failure
+    Raises ValueError or IOError on failure, as appropriate
     """
-    if bootrom_image_pathname.find("~") != -1:
-        error("BootRom pathanme cannot contain '~'")
-        return False
-
-    if script_path[-1] != "/":
-        script_path += "/"
-
-    # Create (scratch) JLink scripts from the efuse list and bootrom_image
-    # file. (Required because JLink doesn't support symbolic substitution
-    # in its script files
-    create_jlink_scripts(script_path, bootrom_image_pathname, efuses)
+    if '~' in bootrom_image_pathname:
+        raise ValueError("BootRom pathanme cannot contain '~'")
 
     # Wait for the HAPS board to finish initializing
     if haps_board_ready(chipit_tty):
-        # Go through the JTAG download and boot sequence
-        jtag_reset_phase(jlink_sn, script_path)
-        jtag_post_reset_phase(jlink_sn, script_path)
-        return True
-    return False
+        # Create (scratch) JLink scripts from the efuse list and
+        # bootrom_image file. (Required because JLink doesn't support
+        # symbolic substitution in its script files
+        create_jlink_scripts(script_path, bootrom_image_pathname, efuses)
 
+        # Go through the JTAG download and boot sequence
+        jtag_reset_phase(jlink_sn, script_path, reset_mode)
+        jtag_post_reset_phase(jlink_sn, script_path, reset_mode)
+
+        # Clean up the scratch JLink scripts
+        remove_jlink_scripts(script_path)
+    else:
+        raise IOError("HAPS board unresponsive")

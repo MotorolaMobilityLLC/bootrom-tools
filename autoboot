@@ -36,7 +36,7 @@ import sys
 import argparse
 import errno
 from util import error
-from haps_boot import download_and_boot_haps
+from haps_boot import download_and_boot_haps, RESET_MANUAL, RESET_FT232H
 
 # Program return values
 PROGRAM_SUCCESS = 0
@@ -67,6 +67,11 @@ efuses = {
     "IMS6": 0x00000000,
     "IMS7": 0x00000000,
     "IMS8": 0x00000000}
+
+# Reset mechanism
+RESET_MECHANISMS = {
+    "manual": RESET_MANUAL,
+    "adafruit": RESET_FT232H}
 
 
 def normalize_tty_name(tty_name):
@@ -124,6 +129,10 @@ def main():
                         required=True,
                         help="The name of the bootrom file to download")
 
+    parser.add_argument("--reset",
+                        help="The daughterboard reset mechanism "
+                             "(manual | adafruit)")
+
     args = parser.parse_args()
 
     args.chipit = normalize_tty_name(args.chipit)
@@ -132,8 +141,22 @@ def main():
     if args.efuse:
         parse_efuse(args.efuse)
 
-    download_and_boot_haps(args.chipit, args.scripts, args.jlinksn, args.bin,
-                           efuses)
+    # Determine the reset mechanism (default will be "manual")
+    if args.reset in RESET_MECHANISMS:
+        reset_mechanism = RESET_MECHANISMS[args.reset]
+    elif not args.reset:
+        reset_mechanism = RESET_MANUAL
+    else:
+        error("Unknown reset mechanism:", args.reset)
+        sys.exit(PROGRAM_ERRORS)
+
+    try:
+        download_and_boot_haps(args.chipit, args.scripts, args.jlinksn,
+                               reset_mechanism, args.bin, efuses)
+        sys.exit(PROGRAM_SUCCESS)
+    except (ValueError):
+        error("Unable to contact HAPS board")
+        sys.exit(PROGRAM_ERRORS)
 
 
 ## Launch main
