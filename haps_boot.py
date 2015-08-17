@@ -34,7 +34,10 @@
 from __future__ import print_function
 import os
 import subprocess
+import threading
+import Queue
 import serial
+import termios
 import Adafruit_GPIO as GPIO
 import Adafruit_GPIO.FT232H as FT232H
 
@@ -195,7 +198,7 @@ def haps_board_ready(chipit_name):
                     if ch:
                         buffer += ch
                         num_timeouts = 0
-                        if buffer.find("HAPS62>") != -1:
+                        if "HAPS62>" in buffer:
                             have_prompt = True
                             break
                         if ch == "\n":
@@ -338,3 +341,135 @@ def download_and_boot_haps(chipit_tty, script_path, jlink_sn, reset_mode,
         remove_jlink_scripts(script_path)
     else:
         raise IOError("HAPS board unresponsive")
+
+
+class WorkerThread(threading.Thread):
+    """ A worker thread to read the daughterboard dbgserial in the background
+
+        Output is done by placing captured lines into the Queue passed in
+        result_q.
+
+        Ask the thread to stop by calling its join() method.
+    """
+    def __init__(self, dbgser_tty_name, result_q, stop_strings=None):
+        super(WorkerThread, self).__init__()
+        self.dbgser_tty_name = dbgser_tty_name
+        self.result_q = result_q
+        self.stop_strings = stop_strings
+        self.stoprequest = threading.Event()
+
+    def run(self):
+        if os.name != "posix":
+            raise ValueError("Can only be run on Posix systems")
+            return
+
+        buffer = ""
+        # While PySerial would be preferable and more machine-independant,
+        # it does not support echo suppression
+        with open(self.dbgser_tty_name, 'r+') as dbgser:
+            # Config the debug serial port
+            oldattrs = termios.tcgetattr(dbgser)
+            newattrs = termios.tcgetattr(dbgser)
+            newattrs[4] = termios.B115200  # ispeed
+            newattrs[5] = termios.B115200  # ospeed
+            newattrs[3] = newattrs[3] & ~termios.ICANON & ~termios.ECHO
+            newattrs[6][termios.VMIN] = 0
+            newattrs[6][termios.VTIME] = 10
+            termios.tcsetattr(dbgser, termios.TCSANOW, newattrs)
+
+            # As long as we weren't asked to stop, try to capture dbgserial
+            # output and push each line up the result queue.
+            try:
+                while not self.stoprequest.isSet():
+                    ch = dbgser.read(1)
+                    if ch:
+                        if ch == "\n":
+                            # Push the line (sans newline) into our queue
+                            # and clear the buffer for the next line.
+                            self.result_q.put(buffer)
+                            buffer = ""
+                        elif ch != "\r":
+                            buffer += ch
+            except IOError:
+                pass
+            finally:
+                # Restore previous settings
+                termios.tcsetattr(dbgser, termios.TCSAFLUSH, oldattrs)
+                # Flush any partial buffer
+                if buffer:
+                    self.result_q.put(buffer)
+
+    def join(self, timeout=None):
+        # Automatically stop our selves when the client joins to us
+        self.stoprequest.set()
+        super(WorkerThread, self).join(timeout)
+
+
+def download_and_boot_haps_capture(chipit_tty_name, script_path, jlink_sn,
+                                   reset_mode, bootrom_image_pathname, efuses,
+                                   dbgser_tty_name, timeout,
+                                   stop_strings=None):
+    """Wait for HAPS board, then download/run a BootRom image, capturing output
+
+    This is a superset of "download_and_boot_haps" that captures the debug
+    serial output
+    Arguments:
+        chipit_tty_name:
+            The TTY used by the HAPS board ChipIT supervisor (typically
+            "/dev/ttyUSBx")
+        script_path:
+            The path to where the JLink scripts will be written
+        jlink_sn:
+            The serial number of the JLink JTAG module (found on the bottom
+            of the JLink module)
+        bootrom_image_pathname:
+             Absolute or relative pathname to the BootRom.bin file ("~" is
+             not allowed)
+        efuses:
+             A list of eFuse names and values to write (see the global
+             "efuses")
+        dbgser_tty_name:
+             The TTY used by the daugherboard debug serial output
+        timeout:
+             How long, in seconds, to wait before concluding that serial
+             output from the BootRom has ceased.
+        stop_strings:
+             (optional) List of strings to look for in the debug spew. If any
+             are encountered, capture stops. (The stop string is retained/
+             outputed)
+
+    Returns: A list of the debug spew, one line per entry.
+    """
+    # Start the debug serial reader background thread
+    result_q = Queue.Queue()
+    dbgser_monitor = WorkerThread(dbgser_tty_name, result_q)
+    dbgser_monitor.start()
+
+    # Download and launch the test image
+    download_and_boot_haps(chipit_tty_name, script_path, jlink_sn, reset_mode,
+                           bootrom_image_pathname, efuses)
+
+    # Harvest the debug serial until we see a stop string or it times out.
+    stop = False
+    capture = []
+    while not stop:
+        # Use a blocking 'get' from the queue
+        try:
+            result = result_q.get(True, timeout)
+        except Queue.Empty:
+            stop = True
+        else:
+            # Display/capture the line of debug spew
+            capture.append(result)
+
+            # Check for landmarks in the debug spew
+            if stop_strings:
+                for term in stop_strings:
+                    if term in result:
+                        stop = True
+                        break
+
+    # Stop our worker thread
+    dbgser_monitor.join()
+
+    return capture
