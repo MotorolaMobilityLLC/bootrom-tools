@@ -41,6 +41,12 @@ import termios
 import Adafruit_GPIO as GPIO
 import Adafruit_GPIO.FT232H as FT232H
 
+# haps_monitor class "monitor" status values
+HAPS_MONITOR_TIMEOUT = 0
+HAPS_MONITOR_STOP = 1
+HAPS_MONITOR_PASS = 2
+HAPS_MONITOR_FAIL = 3
+
 # HAPS character timeout (1 second wait on characters, in 0.1 sec units)
 HAPS_CHAR_TIMEOUT = 10
 
@@ -405,16 +411,16 @@ class WorkerThread(threading.Thread):
         super(WorkerThread, self).join(timeout)
 
 
-def download_and_boot_haps_capture(chipit_tty_name, script_path, jlink_sn,
+def download_and_boot_haps_capture(chipit_tty, script_path, jlink_sn,
                                    reset_mode, bootrom_image_pathname, efuses,
                                    dbgser_tty_name, timeout,
-                                   stop_strings=None):
+                                   pass_strings, fail_strings, stop_strings):
     """Wait for HAPS board, then download/run a BootRom image, capturing output
 
     This is a superset of "download_and_boot_haps" that captures the debug
     serial output
     Arguments:
-        chipit_tty_name:
+        chipit_tty:
             The TTY used by the HAPS board ChipIT supervisor (typically
             "/dev/ttyUSBx")
         script_path:
@@ -446,7 +452,7 @@ def download_and_boot_haps_capture(chipit_tty_name, script_path, jlink_sn,
     dbgser_monitor.start()
 
     # Download and launch the test image
-    download_and_boot_haps(chipit_tty_name, script_path, jlink_sn, reset_mode,
+    download_and_boot_haps(chipit_tty, script_path, jlink_sn, reset_mode,
                            bootrom_image_pathname, efuses)
 
     # Harvest the debug serial until we see a stop string or it times out.
@@ -463,7 +469,14 @@ def download_and_boot_haps_capture(chipit_tty_name, script_path, jlink_sn,
             capture.append(result)
 
             # Check for landmarks in the debug spew
+            if fail_strings:
+                # Stop on any failure string
+                for term in fail_strings:
+                    if term in result:
+                        stop = True
+                        break
             if stop_strings:
+                # Stop on any stop string
                 for term in stop_strings:
                     if term in result:
                         stop = True
@@ -473,3 +486,142 @@ def download_and_boot_haps_capture(chipit_tty_name, script_path, jlink_sn,
     dbgser_monitor.join()
 
     return capture
+
+
+class haps_capture_monitor(object):
+    """ Encapsulation of a HAPS download-boot-monitor-stop cycle
+    """
+    def __init__(self, chipit_tty, script_path, jlink_sn, reset_mode,
+                 bootrom_image_pathname, efuses, dbgser_tty_name, timeout,
+                 fail_strings, stop_strings):
+        """Wait for HAPS board, then download/run a BootRom image
+
+        Use "haps_capture_monitor.monitor to monitor the debug spew
+
+        Arguments:
+            chipit_tty:
+                The TTY used by the HAPS board ChipIT supervisor (typically
+                "/dev/ttyUSBx")
+            script_path:
+                The path to where the scratch JLink scripts will be written
+            jlink_sn:
+                The serial number of the JLink JTAG module (found on the bottom
+                of the JLink module)
+            bootrom_image_pathname:
+                 Absolute or relative pathname to the BootRom.bin file ("~" is
+                 not allowed)
+            efuses:
+                A list of eFuse names and values to write (see the global
+                 "efuses")
+            dbgser_tty_name:
+                 The TTY used by the daugherboard debug serial output
+            timeout:
+                 How long, in seconds, to wait before concluding that serial
+                 output from the BootRom has ceased. (This will result in a
+                 "t"imeout status.)
+            fail_strings:
+                 List of failure strings to look for in the debug spew. If any
+                 are encountered, capture stops.
+            stop_strings:
+                 List of strings to look for in the debug spew. If any
+                 are encountered, capture stops.
+        """
+        self.chipit_tty = chipit_tty
+        self.script_path = script_path
+        self.jlink_sn = jlink_sn
+        self.reset_mode = reset_mode
+        self.bootrom_image_pathname = bootrom_image_pathname
+        self.efuses = efuses
+        self.dbgser_tty_name = dbgser_tty_name
+        self.timeout = timeout
+        self.fail_strings = fail_strings
+        self.stop_strings = stop_strings
+        self.result_q = None
+        self.dbgser_monitor = None
+
+        # Start the debug serial reader background thread
+        self.result_q = Queue.Queue()
+        self.dbgser_monitor = WorkerThread(self.dbgser_tty_name, self.result_q)
+        self.dbgser_monitor.start()
+
+        # Download and launch the test image
+        download_and_boot_haps(self.chipit_tty, self.script_path,
+                               self.jlink_sn, self.reset_mode,
+                               self.bootrom_image_pathname, self.efuses)
+
+    def __del__(self):
+        """ Stop our worker thread """
+        # Stop our worker thread
+        if self.dbgser_monitor:
+            self.dbgser_monitor.join()
+            self.dbgser_monitor = None
+        self.result_q = None
+
+    def __enter__(self):
+        """ Compatability with 'with' statement """
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        """ Compatability with 'with' statement """
+        self.__del__()
+
+    def monitor(self, pass_strings=None):
+        """Capture output from HAPS board until encountering a landmark string
+
+        Parameters:
+            pass_strings An optional set of landmark strings to check for a
+                "test passed" condition. Since the norm for pass strings is
+                that all must be present for the test run to succeed, the
+                caller typically removes strings from this list as we encounter
+                them. Since the fail and stop strings operate on first-
+                occurrance, they can be treated as static for the life of the
+                test and are cached in the class.
+
+        Returns: On encountering any landmark string, returns a 3-element
+            tuple consisting of:
+            - The reason the capture stopped (timeout, stop, pass or fail)
+            - The index into the appropriate xxx_strings array for the matched
+              string. (This will be zero in the case of a test timeout)
+            - A list of the debug spew captured thus far, one line per entry.
+        """
+        # Harvest the debug serial until we see a landmark string or it
+        # times out.
+        stop = False
+        capture = []
+        status = HAPS_MONITOR_TIMEOUT
+        index = 0
+        while not stop:
+            # Use a blocking 'get' from the queue
+            try:
+                result = self.result_q.get(True, self.timeout)
+            except Queue.Empty:
+                # Timeout - test died "silently"
+                stop = True
+            else:
+                # Save the line of debug spew
+                capture.append(result)
+
+                # Check for landmarks in the debug spew
+                if pass_strings:
+                    # Stop on a pass string
+                    for index, term in enumerate(pass_strings):
+                        if term in result:
+                            status = HAPS_MONITOR_PASS
+                            stop = True
+                            break
+                elif self.fail_strings and not stop:
+                    # Stop on any failure string
+                    for index, term in enumerate(self.fail_strings):
+                        if term in result:
+                            status = HAPS_MONITOR_FAIL
+                            stop = True
+                            break
+                elif self.stop_strings and not stop:
+                    # Stop on any stop string
+                    for index, term in enumerate(self.stop_strings):
+                        if term in result:
+                            status = HAPS_MONITOR_STOP
+                            stop = True
+                            break
+
+        return [status, index, capture]

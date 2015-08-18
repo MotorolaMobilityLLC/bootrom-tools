@@ -1,0 +1,465 @@
+#! /usr/bin/env python
+
+#
+# Copyright (c) 2015 Google Inc.
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+# 1. Redistributions of source code must retain the above copyright notice,
+# this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+# this list of conditions and the following disclaimer in the documentation
+# and/or other materials provided with the distribution.
+# 3. Neither the name of the copyright holder nor the names of its
+# contributors may be used to endorse or promote products derived from this
+# software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+# THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+# OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+# WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+# ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+
+from __future__ import print_function
+import os
+import argparse
+import shlex
+from util import error, print_to_error
+from haps_boot import download_and_boot_haps_capture, \
+    RESET_MANUAL, RESET_FT232H, \
+    haps_capture_monitor, HAPS_MONITOR_TIMEOUT, HAPS_MONITOR_STOP, \
+    HAPS_MONITOR_PASS, HAPS_MONITOR_FAIL
+
+# Program return values
+PROGRAM_SUCCESS = 0
+PROGRAM_WARNINGS = 1
+PROGRAM_ERRORS = 2
+
+# e-Fuse settings
+efuses = {
+    "VID": 0x00000000,
+    "PID": 0x00000000,
+    "SN0": 0x00000000,
+    "SN1": 0x00000000,
+    "IMS0": 0x00000000,
+    "IMS1": 0x00000000,
+    "IMS2": 0x00000000,
+    "IMS3": 0x00000000,
+    "IMS4": 0x00000000,
+    "IMS5": 0x00000000,
+    "IMS6": 0x00000000,
+    "IMS7": 0x00000000,
+    "IMS8": 0x00000000}
+
+# Reset mechanism
+RESET_MECHANISMS = {
+    "manual": RESET_MANUAL,
+    "adafruit": RESET_FT232H}
+
+
+def normalize_tty_name(tty_name):
+    # Try to normalize lazy tty names (Posix formats only)
+    #
+    # Returns the normalized name
+    normalized_tty_name = os.path.join("/dev", os.path.basename(tty_name))
+    if not os.path.exists(normalized_tty_name):
+        raise ValueError("Unknown tty: '{0:s}'".format(tty_name))
+    return normalized_tty_name
+
+
+def parse_efuse(eflags_name):
+    # Parse the eFuse file to override the default eFuse values
+    if eflags_name:
+        with open(eflags_name, "r") as fd:
+            for line in fd:
+                fields = line.split()
+                if fields:
+                    if fields[0] in efuses:
+                        efuses[fields[0]] = int(fields[1], 16)
+                    else:
+                        raise ValueError("unknown e-Fuse:", fields[0])
+
+
+def auto_int(x):
+    # Workaround to allow hex numbers to be entered for numeric arguments
+    return int(x, 16)
+
+
+def validate_test_args(test_args):
+    """Sanity-check the test args and return an error string
+
+    Parameters:
+        test_args The test script parser output
+
+    Returns 'None' if the args are valid, or a string if invalid.
+    """
+    # Check that they have specified test criteria
+    if not test_args.pass_str and not test_args.fail_str:
+        return "you must have a pass or a fail string"
+
+    # Check that they haven't specified both pass and fail strings
+    if test_args.pass_str and test_args.fail_str:
+        return "you can't mix pass and fail strings"
+
+    # The line is valid
+    return None
+
+
+def process_1_test(test_args, test_path, jlink_sn, reset_mode, chipit_tty,
+                   efuses, jlink_script_path, dbgser_tty, timeout,
+                   stop_strings):
+    """Process a single test (batch analysis)
+
+    From the parsed test_args, it will download the image, rboot the
+    HAPS board, capture the output and check for any pass/fail criteria.
+
+    Parameters
+        test_args The validated test script parser output
+        test_path The path to the test suite folder
+        jlink_sn The serial No. of the J-Link JTAG adapter
+        reset_mode How to reset the HAPS daughterboard
+        chipit_tty The HAPS 'ChipIT' supervisor tty
+        efuses The path to the file of e-Fuse values to preload
+        jlink_script_path The path to the folder used to create the temporary
+            J-Link scripts used for downloading.
+        dbgser_tty The daughterboard debug serial port
+        timeout How many seconds of no output to wait before concluding the
+            test is over
+        stop_strings A list of strings that define the end of the test
+
+    Returns A 4-element tuple consisting of:
+        - Test-passed flag
+        - Failed-reason string
+        - Failing string
+        - Captured log
+    """
+    # Run the test and capture the output
+    capture = download_and_boot_haps_capture(chipit_tty, jlink_script_path,
+                                             jlink_sn, reset_mode,
+                                             test_args.bin, efuses,
+                                             dbgser_tty, timeout,
+                                             test_args.pass_str,
+                                             test_args.fail_str,
+                                             stop_strings)
+    # Check test results
+    if (test_args.fail_str):
+        # Matching any failure string fails the test
+        for line in capture:
+            for term in test_args.fail_str:
+                if term in line:
+                    return (False, "fail-str present", term, capture)
+    else:
+        # Must match all success strings to pass
+        for line in capture:
+            any_pass_string = False
+            for i, term in enumerate(test_args.pass_str):
+                if term in line:
+                    # Matched a pass string
+                    # As we encounter each pass string, remove it from the list.
+                    # When the list is empty, we've encountered every string
+                    # at least once. The pass comparison also gets faster as we
+                    # find each pass string.
+                    del test_args.pass_str[i]
+                    break
+        if not test_args.pass_str:
+            return (True, "all pass-str present", term, capture)
+        else:
+            return (False, "pass-str missing", term, capture)
+
+    return (True, None, None, None)
+
+
+def process_1_testx(test_args, test_path, jlink_sn, reset_mode, chipit_tty,
+                    efuses, jlink_script_path, dbgser_tty, timeout,
+                    stop_strings):
+    """Process a single test (on-the-fly analysis)
+
+    From the parsed test_args, it will download the image, rboot the
+    HAPS board, capture the output and check for any pass/fail criteria.
+
+    Parameters
+        test_args The validated test script parser output
+        test_path The path to the test suite folder
+        jlink_sn The serial No. of the J-Link JTAG adapter
+        reset_mode How to reset the HAPS daughterboard
+        chipit_tty The HAPS 'ChipIT' supervisor tty
+        efuses The path to the file of e-Fuse values to preload
+        jlink_script_path The path to the folder used to create the temporary
+            J-Link scripts used for downloading.
+        dbgser_tty The daughterboard debug serial port
+        timeout How many seconds of no output to wait before concluding the
+            test is over
+        stop_strings A list of strings that define the end of the test
+
+    Returns A 4-element tuple consisting of:
+        - Test-passed flag
+        - Failed-reason string
+        - Failing string
+        - Captured log
+    """
+    # Run the test and capture the output
+    with haps_capture_monitor(chipit_tty, jlink_script_path, jlink_sn,
+                              reset_mode, test_args.bin, efuses,
+                              dbgser_tty, timeout, test_args.fail_str,
+                              stop_strings) as monitor:
+        test_passed = False
+        fail_reason = None
+        landmark_string = None
+        stop = False
+        capture = []
+        while not stop:
+            (reason, index, partial) = monitor.monitor(test_args.pass_str)
+            capture += partial
+            if reason == HAPS_MONITOR_TIMEOUT or \
+               reason == HAPS_MONITOR_STOP or \
+               reason == HAPS_MONITOR_FAIL:
+                # Bail on the first failure
+                stop = True
+            else:
+                # HAPS_MONITOR_PASS:
+                # As we encounter each pass string, remove it from the list.
+                # When the list is empty, we've encountered every string
+                # at least once. The pass comparison also gets faster as we
+                # find each pass string.
+                del test_args.pass_str[index]
+                if not test_args.pass_str:
+                    stop = True
+
+        # Test concluded, sort out the results
+        if reason == HAPS_MONITOR_FAIL:
+            # We stop with a 'FAIL on the first fail string
+            test_passed = False
+            fail_reason = "fail-str present"
+            landmark_string = test_args.fail_str[index]
+        elif reason == HAPS_MONITOR_PASS:
+            # We only stop with a 'PASS if we encountered all pass strings
+            test_passed = True
+            fail_reason = "all pass-str present"
+        else:
+            # We ran to completion without encountering a fail string
+            # or without encountering all of the pass strings.
+            if test_args.fail_str:
+                test_passed = True
+                fail_reason = "no failures"
+            else:
+                test_passed = False
+                fail_reason = "pass-str missing"
+                landmark_string = test_args.pass_str
+
+    return (test_passed, fail_reason, landmark_string, capture)
+
+
+def print_debug_log(debug_output_list):
+    # Print the captured debug spew
+    print_to_error("Test log:")
+    if not debug_output_list:
+        print_to_error("    (No debug output)")
+    else:
+        print_to_error("\n".join(debug_output_list))
+    print_to_error("")
+
+
+def process_test_file(test_pathname, jlink_sn, reset_mode, chipit_tty,
+                      efuses, jlink_script_path, dbgser_tty, timeout,
+                      verbose, quick_test, stop_strings=None):
+    """Process the test file (generated by create-bootrom-test-suite)
+
+    Processes the test descriptor file, generating an output file
+    in the folder referenced by test_path, and a set of modified
+    BootRom.bin files.
+
+    Returns a 2-element tuple containing:
+        - the number of tests that passed
+        - the number of tests that failed
+    """
+    num_passed = 0
+    num_failed = 0
+
+    # Split the test_pathname into path and file_name
+    (path, script) = os.path.split(test_pathname)
+
+    # Ensure there is a test folder
+    if not os.path.isdir(path):
+        raise ValueError("Missing test folder")
+
+    # Set up the test file parser
+    parser = argparse.ArgumentParser(prog=script)
+    parser.add_argument("--testname", "-t",
+                        required=True,
+                        help="The test name")
+
+    parser.add_argument("--description", "-d",
+                        help="The test description")
+
+    parser.add_argument("--bin", "-b",
+                        required=True,
+                        help="The BootRom.bin file to test")
+
+    parser.add_argument("--pass_str", "-p",
+                        action="append",
+                        help="passing string")
+
+    parser.add_argument("--fail_str", "-f",
+                        action="append",
+                        help="failing string")
+
+    # Now parse and process each line in the test file
+    with open(test_pathname) as f_test:
+        line_num = 1
+        test_line = ""
+        for line in f_test:
+            # Handle continuation lines
+            line = line.rstrip()
+            if line[-1] == "\\":
+                test_line += line[0:-1]
+                # Note that, while we keep the line number correct, parsing
+                # errors will be displaced to the last line number of a
+                # continued line.
+                line_num += 1
+                continue
+            else:
+                test_line += line
+
+            # Chop each line into a list, stripping comments and
+            # preserving quoted strings
+            test_descriptor = shlex.split(test_line, True)
+            if test_descriptor:
+                test_args = parser.parse_args(test_descriptor)
+                error_string = validate_test_args(test_args)
+                if error_string:
+                    # Display the parsing error
+                    error("(line {0:d}) {1:s}:".format(line_num, error_string))
+                    print_to_error(line)
+                else:
+                    (test_passed, reason, landmark_string, debug_capture) = \
+                        process_1_testx(test_args, path,
+                                        jlink_sn, reset_mode, chipit_tty,
+                                        efuses, jlink_script_path,
+                                        dbgser_tty, timeout, stop_strings)
+                    if test_passed:
+                        num_passed += 1
+                        # Optionally display the test pass
+                        if verbose:
+                            print_to_error("Test '{0:s}' OK: {1:s}:".
+                                           format(test_args.testname,
+                                                  reason))
+                            print_debug_log(debug_capture)
+                    else:
+                        num_failed += 1
+                        # Display the test failure
+                        error("Test '{0:s}' failed because {1:s}:".
+                              format(test_args.testname, reason))
+                        print_to_error("    '{0:s}'".format(landmark_string))
+                        print_debug_log(debug_capture)
+
+                        # In quick_test mode, stop the test suite on the
+                        # first failure
+                        if quick_test:
+                            break
+
+            line_num += 1
+            test_line = ""
+    return (num_passed, num_failed)
+
+
+def main():
+    """Run a test suite created from create-bootrom-tests"""
+
+    parser = argparse.ArgumentParser()
+
+    # Test args:
+    parser.add_argument("--test", "-t",
+                        required=True,
+                        help="The pathname to the file containing "
+                             "the test descriptors")
+
+    parser.add_argument("--quick", "-q",
+                        action='store_true',
+                        help="Quick test: stop on first failure")
+
+    parser.add_argument("--verbose", "-v",
+                        action='store_true',
+                        help="Quick test: stop on first failure")
+
+    # Autoboot Common args:
+    parser.add_argument("--jlinksn",
+                        required=True,
+                        help="The JLink serial number")
+
+    parser.add_argument("--chipit",
+                        required=True,
+                        help="The name of the HAPS ChipIT supervisor tty")
+
+    parser.add_argument("--efuse",
+                        help="The pathname to the eFuse file")
+
+    parser.add_argument("--scripts",
+                        default="./",
+                        help="The pathname to the JLink scripts folder")
+
+    parser.add_argument("--reset",
+                        help="The daughterboard reset mechanism "
+                             "(manual | adafruit)")
+
+    # Capture-specific args:
+    parser.add_argument("--dbgser",
+                        required=True,
+                        help="The name of the daughterboard debug serial tty")
+
+    parser.add_argument("--timeout",
+                        type=int,
+                        default=5,
+                        help="Debug serial timeout, in seconds")
+
+    parser.add_argument("--stop",
+                        action="append",
+                        help="A 'stop recording' string for which to monitor")
+
+    args = parser.parse_args()
+
+    # Fixup the TTY names as needed
+    args.chipit = normalize_tty_name(args.chipit)
+    args.dbgser = normalize_tty_name(args.dbgser)
+
+    # Override the default eFuses with the supplied file
+    if args.efuse:
+        parse_efuse(args.efuse)
+
+    # Determine the reset mechanism (default will be "manual")
+    if args.reset in RESET_MECHANISMS:
+        reset_mechanism = RESET_MECHANISMS[args.reset]
+    elif not args.reset:
+        reset_mechanism = RESET_MANUAL
+    else:
+        error("Unknown reset mechanism:", args.reset)
+        sys.exit(PROGRAM_ERRORS)
+
+    # Run the test suite
+    try:
+        synopsis = process_test_file(args.test, args.jlinksn, reset_mechanism,
+                                     args.chipit, efuses, args.scripts,
+                                     args.dbgser, args.timeout, args.verbose,
+                                     args.quick, args.stop)
+        print(synopsis[0], "passed", synopsis[1], "failed",
+              synopsis[0] + synopsis[1], "total")
+    except IOError as e:
+        error("I/O Error: ({0}): {1}".format(e.errno, e.strerror))
+    except ValueError as e:
+        error("Value Error: {0}".format(e))
+    except:
+        error("Unknown error")
+        raise
+
+
+## Launch main
+#
+if __name__ == '__main__':
+    main()
