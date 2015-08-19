@@ -49,7 +49,7 @@ on your system. The HAPS-2 supervisor monitor is configured 230400-8-n-1.
     |      |           +-----------+ |           |
     |      |               ^         |           |
     |      |               |         |           |
-    |      |           +---------+|  |           |
+    |      |           +----------+  |           |
     |      |           |  GPIO0   |  |           |
     |      |---(usb)---| Adafruit |  |           |
     |      |           |  GPIO1   |  |           |
@@ -150,14 +150,14 @@ While *autoboot* was designed primarily as a framework for testing the
 underlying autoboot libarary, it can be used as a standalone tool for
 downloading and running a BootRom image. A typical invocation would be:
 
-    autoboot --jlinksn 504302001 --chipit /dev/ttyUSB4 \
-      --efuse ~/jgdb/efuse --dbgser /dev/ttyUSB2  --reset adafruit \
+    autoboot --jlinksn 504302001 --chipit /dev/ttyUSB5 \
+      --efuse ~/jgdb/efuse --capture /dev/ttyUSB3  --reset adafruit \
       --bin ~/work/bootrom/build/bootrom.bin
 
 * `--jlinksn`: The serial number of the J-Link JTAG interface.
 * `--chipit`: The serial port used by the HAPS-62 *ChipIt* supervisor.
-* `--efuse`: The e-Fuse settings (see: *Appendix B*)
-* `--dbgser`: The daughterboard's debug serial port
+* `--efuse`: The e-Fuse settings file (see: *Appendix B*)
+* `--capture`: The daughterboard's debug serial port
 * `--reset adafruit | manual`: (optional) The daughterboard reset mechanism.
 Adafruit will use the Adafruit USB-GPIO adapter to control the reset
 line. Manual will prompt you to manipulate the reset DIP switch. If
@@ -168,8 +168,8 @@ line. Manual will prompt you to manipulate the reset DIP switch. If
 You can also have autoboot log the debug output to a log file
 by adding the `--log` parameter:
 
-    autoboot --jlinksn 504302001 --chipit /dev/ttyUSB4 \
-      --efuse ~/jgdb/efuse --dbgser /dev/ttyUSB2  --reset adafruit \
+    autoboot --jlinksn 504302001 --chipit /dev/ttyUSB5 \
+      --efuse ~/jgdb/efuse --capture /dev/ttyUSB3  --reset adafruit \
       --bin ~/work/bootrom/build/bootrom.bin \
       --log foo.log
 

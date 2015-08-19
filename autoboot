@@ -138,14 +138,11 @@ def main():
     # Capture-specific args:
     parser.add_argument("--capture",
                         action='store_true',
-                        help="Capture the debug spew")
+                        help="Capture the debug spew from the "
+                             "daughterboard debug serial tty")
 
     parser.add_argument("--out",
                         help="The file to which the debug spew is written")
-
-    parser.add_argument("--dbgser",
-                        required=True,
-                        help="The name of the daughterboard debug serial tty")
 
     parser.add_argument("--stop",
                         action="append",
@@ -157,10 +154,6 @@ def main():
                         help="Debug serial timeout, in seconds")
 
     args = parser.parse_args()
-
-    # Fixup the TTY names as needed
-    args.chipit = normalize_tty_name(args.chipit)
-    args.dbgser = normalize_tty_name(args.dbgser)
 
     # Override the eFuses with the supplied file
     if args.efuse:
@@ -179,11 +172,13 @@ def main():
     # capturing the debug spew
     if args.capture:
         try:
+            args.chipit = normalize_tty_name(args.chipit)
+            args.capture = normalize_tty_name(args.capture)
             capture = download_and_boot_haps_capture(args.chipit, args.scripts,
                                                      args.jlinksn,
                                                      reset_mechanism, args.bin,
-                                                     efuses, args.dbgser,
-                                                     args.timeout, args.stop)
+                                                     efuses, args.capture,
+                                                     args.timeout, None, None, args.stop)
         except (ValueError):
             error("Unable to contact HAPS board")
             sys.exit(PROGRAM_ERRORS)
@@ -195,6 +190,7 @@ def main():
             print("\n".join(capture))
     else:
         try:
+            args.chipit = normalize_tty_name(args.chipit)
             download_and_boot_haps(args.chipit, args.scripts, args.jlinksn,
                                    reset_mechanism, args.bin, efuses)
         except (ValueError):
