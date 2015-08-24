@@ -39,6 +39,10 @@ from util import error
 import io
 from elftools.elf.elffile import ELFFile
 
+DEFAULT_ARA_BOOT_STAGE = 2
+DEFAULT_ARA_VID = 0xdead
+DEFAULT_ARA_PID = 0xbeef
+
 # Flag to indicate that the last arg parsed was a section type, which
 # means that an optional section offset is now legal
 allow_section_offset = False
@@ -129,9 +133,6 @@ class ElfFileAction(argparse.Action):
 def validate_args(args, sections):
     # Sanity-check the command line args and return a "valid" flag
     success = True
-    if not args.out:
-        error("Missing --out file!")
-        success = False
     if not sections:
         error("You need at least one --code, --data, --manifest or --elf!")
         success = False
@@ -156,6 +157,13 @@ def validate_args(args, sections):
     if args.ara_pid < 0 or args.ara_pid > 0xffffffff:
         error("--ara_pid is out of range")
         success = False
+    if args.ara_stage < 1 or args.ara_stage > 3:
+        error("--ara-stage is out of range")
+        success = False
+    if not args.out:
+        args.out = 'ara:{:04x}:{:04x}:{:04x}:{:04x}:{:04x}.tftf'.format(
+                        args.unipro_mfg, args.unipro_pid, args.ara_vid,
+                        args.ara_pid, args.ara_stage)
     # TODO: Other checks TBD
     return success
 
@@ -167,7 +175,7 @@ def main():
 
     Usage: create-tftf --load <num> --start <num> --out <file> \
            {--name <string>} {--unipro-mfg} {--unipro-pid} \
-           {--ara-vid} {--ara-pid} \
+           {--ara-vid} {--ara-pid} {--ara-stage} \
            {-v | --verbose} {--map} \
            [<section_type> <file> {--offset <num>} {--skip <num>}]...
     Where:
@@ -187,6 +195,8 @@ def main():
             ARA vendor ID
         --ara-pid
             ARA product ID
+        --ara-stage
+            ARA boot stage
         -v | --verbose
             Display the TFTF header and a synopsis of each TFTF section
         --map
@@ -282,13 +292,18 @@ def main():
 
     parser.add_argument("--ara-vid",
                         type=auto_int,
-                        default=0,
+                        default=DEFAULT_ARA_VID,
                         help="The ARA vendor-ID")
 
     parser.add_argument("--ara-pid",
                         type=auto_int,
-                        default=0,
+                        default=DEFAULT_ARA_PID,
                         help="The ARA product-ID")
+
+    parser.add_argument("--ara-stage",
+                        type=auto_int,
+                        default=DEFAULT_ARA_BOOT_STAGE,
+                        help="The ARA boot stage")
 
     args = parser.parse_args()
 
