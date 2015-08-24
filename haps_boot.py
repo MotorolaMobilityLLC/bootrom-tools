@@ -297,23 +297,34 @@ def reset_spirom_daughterboard(apply_reset, reset_mode):
 def jtag_reset_phase(jlink_serial_no, script_path, reset_mode):
     # Apply the reset and run the "during-reset" JTAG script
     # (JLINK_RESET_SCRIPT)
-    # NB. Current version of JLinkExe doesn't return non-zero status on error,
-    # so "check_call" is there for future releases.
+    # Notes:
+    #     1. Current version of JLinkExe doesn't return non-zero status on
+    #        error, so "check_call" is there for future releases.
+    #     2. We ues "check_output" to hide the debug spew from JLinkExe, but
+    #        otherwise have no need for it.
     reset_spirom_daughterboard(True, reset_mode)
-    subprocess.check_call(["JLinkExe", "-SelectEmuBySN", jlink_serial_no,
-                          "-CommanderScript",
-                          os.path.join(script_path, JLINK_RESET_SCRIPT)])
+    subprocess.check_output(["JLinkExe", "-SelectEmuBySN", jlink_serial_no,
+                            "-CommanderScript",
+                            os.path.join(script_path, JLINK_RESET_SCRIPT)])
 
 
 def jtag_post_reset_phase(jlink_serial_no, script_path, reset_mode):
     # Remove the reset and run the "post-reset" JTAG script
     # (JLINK_POST_RESET_SCRIPT)
-    # NB. Current version of JLinkExe doesn't return non-zero status on error,
+    # NB: Current version of JLinkExe doesn't return non-zero status on error,
     # so "check_call" is there for future releases.
     reset_spirom_daughterboard(False, reset_mode)
-    subprocess.check_call(["JLinkExe", "-SelectEmuBySN", jlink_serial_no,
-                          "-CommanderScript",
-                          os.path.join(script_path, JLINK_POST_RESET_SCRIPT)])
+    spew = subprocess.check_output(["JLinkExe", "-SelectEmuBySN",
+                                   jlink_serial_no, "-CommanderScript",
+                                   os.path.join(script_path,
+                                                JLINK_POST_RESET_SCRIPT)])
+    # Check the JLinkExe debug spew for errors
+    if "WARNING: CPU could not be halted" in spew:
+        raise IOError("CPU could not be halted")
+    for line in spew.splitlines():
+        if line.startswith("Downloading file ["):
+            if not "]...O.K." in line:
+                raise IOError("Unable to download [" + line.partition("[")[2])
 
 
 def download_and_boot_haps(chipit_tty, script_path, jlink_sn, reset_mode,
