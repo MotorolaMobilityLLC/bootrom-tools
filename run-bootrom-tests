@@ -29,6 +29,7 @@
 #
 
 from __future__ import print_function
+import sys
 import os
 import argparse
 import common_args
@@ -160,14 +161,13 @@ def process_1_test(test_args, test_path, jlink_sn, reset_mode, chipit_tty,
     else:
         # Must match all success strings to pass
         for line in capture:
-            any_pass_string = False
             for i, term in enumerate(test_args.pass_str):
                 if term in line:
                     # Matched a pass string
-                    # As we encounter each pass string, remove it from the list.
-                    # When the list is empty, we've encountered every string
-                    # at least once. The pass comparison also gets faster as we
-                    # find each pass string.
+                    # As we encounter each pass string, remove it from the
+                    # list. When the list is empty, we've encountered every
+                    # string at least once. The pass comparison also gets
+                    # faster as we find each pass string.
                     del test_args.pass_str[i]
                     break
         if not test_args.pass_str:
@@ -437,9 +437,9 @@ def main():
         print(synopsis[0], "passed", synopsis[1], "failed",
               synopsis[0] + synopsis[1], "total")
     except IOError as e:
-        error("I/O Error: ({0}): {1}".format(e.errno, e.strerror))
+        print_to_error("I/O Error: {0}".format(e))
     except ValueError as e:
-        error("Value Error: {0}".format(e))
+        print_to_error("Value Error: {0}".format(e))
     except:
         error("Unknown error")
         raise
