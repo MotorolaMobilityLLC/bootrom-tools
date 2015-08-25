@@ -31,6 +31,7 @@
 from __future__ import print_function
 import os
 import argparse
+import common_args
 import shlex
 from util import error, print_to_error
 from haps_boot import download_and_boot_haps_capture, \
@@ -390,29 +391,12 @@ def main():
                         help="Quick test: stop on first failure")
 
     # Autoboot Common args:
-    parser.add_argument("--jlinksn",
-                        required=True,
-                        help="The JLink serial number")
-
-    parser.add_argument("--chipit",
-                        required=True,
-                        help="The name of the HAPS ChipIT supervisor tty")
-
-    parser.add_argument("--efuse",
-                        help="The pathname to the eFuse file")
-
-    parser.add_argument("--scripts",
-                        default="./",
-                        help="The pathname to the JLink scripts folder")
-
-    parser.add_argument("--reset",
-                        help="The daughterboard reset mechanism "
-                             "(manual | adafruit)")
+    for args, kwargs in common_args.AUTOBOOT_COMMON_ARGUMENTS:
+        parser.add_argument(*args, **kwargs)
 
     # Capture-specific args:
-    parser.add_argument("--dbgser",
-                        required=True,
-                        help="The name of the daughterboard debug serial tty")
+    #parser.add_argument("--capture",
+    #                    help="The name of the daughterboard debug serial tty")
 
     parser.add_argument("--timeout",
                         type=int,
@@ -427,7 +411,7 @@ def main():
 
     # Fixup the TTY names as needed
     args.chipit = normalize_tty_name(args.chipit)
-    args.dbgser = normalize_tty_name(args.dbgser)
+    args.capture = normalize_tty_name(args.capture)
 
     # Override the default eFuses with the supplied file
     if args.efuse:
@@ -446,7 +430,7 @@ def main():
     try:
         synopsis = process_test_file(args.test, args.jlinksn, reset_mechanism,
                                      args.chipit, efuses, args.scripts,
-                                     args.dbgser, args.timeout, args.verbose,
+                                     args.capture, args.timeout, args.verbose,
                                      args.quick, args.stop)
         print(synopsis[0], "passed", synopsis[1], "failed",
               synopsis[0] + synopsis[1], "total")

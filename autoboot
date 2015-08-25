@@ -34,6 +34,7 @@
 from __future__ import print_function
 import sys
 import argparse
+import common_args
 import errno
 from util import error
 from haps_boot import download_and_boot_haps, download_and_boot_haps_capture,\
@@ -112,34 +113,17 @@ def main():
     parser = argparse.ArgumentParser()
 
     # Common args:
-    parser.add_argument("--jlinksn",
-                        required=True,
-                        help="The JLink serial number")
+    for args, kwargs in common_args.AUTOBOOT_COMMON_ARGUMENTS:
+        parser.add_argument(*args, **kwargs)
 
-    parser.add_argument("--chipit",
-                        required=True,
-                        help="The name of the HAPS ChipIT supervisor tty")
-
-    parser.add_argument("--efuse",
-                        help="The pathname to the eFuse file")
-
-    parser.add_argument("--scripts",
-                        default="./",
-                        help="The pathname to the scripts folder")
-
+    # Capture-specific args:
     parser.add_argument("--bin",
                         required=True,
                         help="The name of the bootrom file to download")
 
-    parser.add_argument("--reset",
-                        help="The daughterboard reset mechanism "
-                             "(manual | adafruit)")
-
-    # Capture-specific args:
-    parser.add_argument("--capture",
-                        action='store_true',
-                        help="Capture the debug spew from the "
-                             "daughterboard debug serial tty")
+    #parser.add_argument("--capture",
+    #                    help="Capture the debug spew from the "
+    #                         "daughterboard debug serial tty")
 
     parser.add_argument("--out",
                         help="The file to which the debug spew is written")
