@@ -64,32 +64,53 @@ def auto_int(x):
     return int(x, 16)
 
 
-def validate_test_args(test_args):
+def have_patching_args(test_args):
+    """Determine from the test args if the bin file will be patched
+
+    Returns True if the file will be patched, False otherwise.
+    """
+    # Normally we will be patching the binary. However, some tests (e.g.,
+    # the e-Fuse test set) use stock images with different e-Fuse preloads
+    if test_args.replace_with or test_args.xor_with or test_args.or_with or \
+       test_args.and_with or test_args.replacement_bytes or test_args.offset:
+        return True
+    else:
+        return False
+
+
+def validate_test_args(test_args, patch_file):
     """Sanity-check the test args and return an error string
 
     Returns None if the args are valid, or a string if invalid.
     """
-    # Check that there is exactly one file modification action
-    new_byte_modes = 0
-    if test_args.replace_with:
-        new_byte_modes += 1
-    if test_args.xor_with:
-        new_byte_modes += 1
-    if test_args.or_with:
-        new_byte_modes += 1
-    if test_args.and_with:
-        new_byte_modes += 1
+    # Normally we will be patching the binary. However, some tests (e.g.,
+    # the e-Fuse test set) use stock images with different e-Fuse preloads
+    if patch_file:
+        # Check that there is exactly one file modification action
+        new_byte_modes = 0
+        if test_args.replace_with:
+            new_byte_modes += 1
+        if test_args.xor_with:
+            new_byte_modes += 1
+        if test_args.or_with:
+            new_byte_modes += 1
+        if test_args.and_with:
+            new_byte_modes += 1
 
-    if new_byte_modes < 1:
-        return "You must specify an action (-r, -x, -o, or -a)"
-    elif new_byte_modes > 1:
-        return "Only one of -r, -x, -o, or -a are allowed"
+        if new_byte_modes < 1:
+            return "You must specify an action (-r, -x, -o, or -a)"
+        elif new_byte_modes > 1:
+            return "Only one of -r, -x, -o, or -a are allowed"
 
-    # Check that we have replacement bytes with which to alter the bin file
-    if not len(test_args.replacement_bytes):
-        return "No new bytes specified"
+        # Check that we have replacement bytes with which to alter the bin file
+        if not len(test_args.replacement_bytes):
+            return "No new bytes specified"
 
-    # Check that they have specified test criteria
+        # Check that they specified where in the bin file to patch
+        if not test_args.offset:
+            return "--offset/-z is required"
+
+    # Check that they have specified test pass/fail criteria
     if not test_args.pass_str and not test_args.fail_str:
         return "you must have a pass or a fail string"
 
@@ -109,7 +130,7 @@ def write_test_term(f_test, tag, value):
         f_test.write("{0:s} {1:s} ".format(tag, value))
 
 
-def process_1_desc(test_args, f_test, test_path, bin_pathname,
+def process_1_desc(test_args, patch_file, f_test, test_path, bin_pathname,
                    bin_file, map_pathname):
     """Process a single test descriptor
 
@@ -119,36 +140,43 @@ def process_1_desc(test_args, f_test, test_path, bin_pathname,
     in the folder referenced by test_path. The map_pathanme, if
     present, is passed on to hexpatch.
     """
-    bf = bin_file.rsplit(".")
-    altered_bin_pathname = "{0:s}{1:s}-{2:s}.{3:s}".format(
-                           test_path, bf[0], test_args.testname, bf[1])
+    (name, extension) = bin_file.rsplit(".")
+    if patch_file:
+        testname = name + "-" + test_args.testname + "." + extension
+        altered_bin_pathname = os.path.join(test_path, testname)
+    else:
+        altered_bin_pathname = os.path.join(test_path, bin_file)
 
-    # Generate the altered bin file
+    # Generate the test bin file
     # For now, simply shell out.
     # TODO: make hexpatch a callable library
     subprocess.call(["cp", bin_pathname, altered_bin_pathname])
 
-    cmdline = ["hexpatch", "--file", bin_pathname,
-               "--out", altered_bin_pathname,
-               "--offset", test_args.offset]
-    if map_pathname:
-        cmdline += ["--map",  map_pathname]
-    if test_args.xor_with:
-        cmdline += ["-x"]
-    elif test_args.or_with:
-        cmdline += ["-o"]
-    elif test_args.and_with:
-        cmdline += ["-a"]
-    # (There's no test for "replace" because that is hexpatch's default action)
-    for byte in test_args.replacement_bytes:
-        cmdline += ["{0:02x}".format(byte)]
-    subprocess.call(cmdline)
+    if patch_file:
+        cmdline = ["hexpatch", "--file", bin_pathname,
+                   "--out", altered_bin_pathname,
+                   "--offset", test_args.offset]
+        if map_pathname:
+            cmdline += ["--map",  map_pathname]
+        if test_args.xor_with:
+            cmdline += ["-x"]
+        elif test_args.or_with:
+            cmdline += ["-o"]
+        elif test_args.and_with:
+            cmdline += ["-a"]
+        # (There's no test for "replace" because that is hexpatch's default
+        # action)
+        for byte in test_args.replacement_bytes:
+            cmdline += ["{0:02x}".format(byte)]
+        subprocess.call(cmdline)
 
     # Generate the test file entry
     write_test_term(f_test, "-t", test_args.testname)
     if test_args.description:
         write_test_term(f_test, "-d", test_args.description)
-    write_test_term(f_test, "-bin", altered_bin_pathname)
+    write_test_term(f_test, "-b", altered_bin_pathname)
+    if test_args.efuse:
+        write_test_term(f_test, "-e", test_args.efuse)
     if test_args.pass_str:
         for str in test_args.pass_str:
             write_test_term(f_test, "-p", str)
@@ -176,7 +204,6 @@ def process_desc_file(desc_pathname, map_pathname, bin_pathname,
                         help="The test description")
 
     parser.add_argument("--offset", "-z",
-                        required=True,
                         help=OFFSET_HELP)
 
     parser.add_argument("--pass_str", "-p",
@@ -186,6 +213,10 @@ def process_desc_file(desc_pathname, map_pathname, bin_pathname,
     parser.add_argument("--fail_str", "-f",
                         action="append",
                         help="failing string")
+
+    parser.add_argument("--efuse", "-e",
+                        help="The pathname of the e-Fuse file"
+                        "(overrides default e-Fuse file)")
 
     # Flags args
     parser.add_argument("--replace_with", "-r",
@@ -231,12 +262,13 @@ def process_desc_file(desc_pathname, map_pathname, bin_pathname,
             test_descriptor = shlex.split(line, True)
             if test_descriptor:
                 test_args = parser.parse_args(test_descriptor)
-                error_string = validate_test_args(test_args)
+                patch_file = have_patching_args(test_args)
+                error_string = validate_test_args(test_args, patch_file)
                 if error_string:
                     error("(line {0:d}) {1:s}:".format(line_num, error_string))
                     print_to_error(line)
                 else:
-                    process_1_desc(test_args, f_test, test_path,
+                    process_1_desc(test_args, patch_file, f_test, test_path,
                                    bin_pathname, bin_file, map_pathname)
             line_num += 1
 
