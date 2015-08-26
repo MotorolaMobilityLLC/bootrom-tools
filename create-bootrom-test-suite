@@ -246,12 +246,11 @@ def process_desc_file(desc_pathname, map_pathname, bin_pathname,
         os.makedirs(test_path)
     test_pathname = test_path + test_file
 
-    # Split the bin_pathname into path and file name
-    index = bin_pathname.rfind("/") + 1
-    if index:
-        bin_file = bin_pathname[index:]
-    else:
-        bin_file = bin_pathname
+    # Extract the image file name from the bin_pathname
+    bin_file = os.path.basename(bin_pathname)
+
+    # Extract the test descriptor file name for use in error messages
+    script = os.path.basename(desc_pathname)
 
     # Now parse and process each line in the test descriptor file
     with open_rw_file_pair(desc_pathname, test_pathname) as (f_desc, f_test):
@@ -261,6 +260,7 @@ def process_desc_file(desc_pathname, map_pathname, bin_pathname,
             # preserving quoted strings
             test_descriptor = shlex.split(line, True)
             if test_descriptor:
+                parser.prog = "{0:s} (line {1:d})".format(script, line_num)
                 test_args = parser.parse_args(test_descriptor)
                 patch_file = have_patching_args(test_args)
                 error_string = validate_test_args(test_args, patch_file)

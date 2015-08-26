@@ -309,6 +309,7 @@ def process_test_file(test_pathname, jlink_sn, reset_mode, chipit_tty,
             # preserving quoted strings
             test_descriptor = shlex.split(test_line, True)
             if test_descriptor:
+                parser.prog = "{0:s} (line {1:d})".format(script, line_num)
                 test_args = parser.parse_args(test_descriptor)
                 error_string = validate_test_args(test_args)
                 if error_string:
