@@ -40,8 +40,8 @@ import io
 from elftools.elf.elffile import ELFFile
 
 DEFAULT_ARA_BOOT_STAGE = 2
-DEFAULT_ARA_VID = 0xdead
-DEFAULT_ARA_PID = 0xbeef
+DEFAULT_ARA_VID = 0
+DEFAULT_ARA_PID = 0
 
 # Flag to indicate that the last arg parsed was a section type, which
 # means that an optional section offset is now legal
