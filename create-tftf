@@ -161,7 +161,7 @@ def validate_args(args, sections):
         error("--ara-stage is out of range")
         success = False
     if not args.out:
-        args.out = 'ara:{:04x}:{:04x}:{:04x}:{:04x}:{:04x}.tftf'.format(
+        args.out = 'ara:{:08x}:{:08x}:{:08x}:{:08x}:{:02x}.tftf'.format(
                         args.unipro_mfg, args.unipro_pid, args.ara_vid,
                         args.ara_pid, args.ara_stage)
     # TODO: Other checks TBD
