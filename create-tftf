@@ -124,7 +124,8 @@ class ElfFileAction(argparse.Action):
                                         'buffer': data_section.data()})
                 assert(code_section is not None or data_section is not None)
                 sections += elf_sections
-                namespace.start = image['e_entry']
+                if namespace.start == 0:
+                    namespace.start = image['e_entry']
         except IOError as e:
             error(option_string, " must be followed by an ELF image!")
         except Exception as e:
