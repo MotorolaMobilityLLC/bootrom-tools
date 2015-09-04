@@ -32,6 +32,7 @@
 #
 
 from __future__ import print_function
+from util import error
 import os
 import subprocess
 import threading
@@ -335,6 +336,9 @@ def jtag_post_reset_phase(jlink_serial_no, script_path, reset_mode):
     for line in spew.splitlines():
         if line.startswith("Downloading file ["):
             if not "]...O.K." in line:
+                if "Could not find emulator with USB serial number" in spew:
+                    error("Couldn't find j-Link unit", jlink_serial_no,
+                          "- is it plugged in?")
                 raise IOError("Unable to download [" + line.partition("[")[2])
 
 
