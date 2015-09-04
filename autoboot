@@ -35,7 +35,7 @@ from __future__ import print_function
 import sys
 import argparse
 import common_args
-import errno
+from efuse import efuses, parse_efuse
 from util import error
 from haps_boot import download_and_boot_haps, download_and_boot_haps_capture,\
     RESET_MANUAL, RESET_FT232H
@@ -53,22 +53,6 @@ HAPS_BOOT_TIMEOUT_COUNT = 300
 
 JLINK_RESET_SCRIPT = "cmd-jlink-start-1"  # "cmd-jlink-start-1"
 JLINK_POST_RESET_SCRIPT = "cmd-jlink-start-2"  # "cmd-jlink-start-2"
-
-# e-Fuse settings
-efuses = {
-    "VID": 0x00000000,
-    "PID": 0x00000000,
-    "SN0": 0x00000000,
-    "SN1": 0x00000000,
-    "IMS0": 0x00000000,
-    "IMS1": 0x00000000,
-    "IMS2": 0x00000000,
-    "IMS3": 0x00000000,
-    "IMS4": 0x00000000,
-    "IMS5": 0x00000000,
-    "IMS6": 0x00000000,
-    "IMS7": 0x00000000,
-    "IMS8": 0x00000000}
 
 # Reset mechanism
 RESET_MECHANISMS = {
@@ -91,20 +75,6 @@ def normalize_tty_name(tty_name):
         # so much for trying to "be nice" - give up
         raise ValueError("Unknown tty: '{0:s}'".format(tty_name))
     return normalized_tty_name
-
-
-def parse_efuse(eflags_name):
-    # Parse the eFuse file to override the default eFuse values
-    if eflags_name:
-        with open(eflags_name, "r") as fd:
-            for line in fd:
-                fields = line.split()
-                if fields:
-                    if fields[0] in efuses:
-                        efuses[fields[0]] = int(fields[1], 16)
-                    else:
-                        error("unknown e-Fuse:", fields[0])
-                        sys.exit(errno.EINVAL)
 
 
 def main():
@@ -162,7 +132,8 @@ def main():
                                                      args.jlinksn,
                                                      reset_mechanism, args.bin,
                                                      efuses, args.capture,
-                                                     args.timeout, None, None, args.stop)
+                                                     args.timeout, None, None,
+                                                     args.stop)
         except (ValueError):
             error("Unable to contact HAPS board")
             sys.exit(PROGRAM_ERRORS)

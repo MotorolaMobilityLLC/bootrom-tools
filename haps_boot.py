@@ -70,7 +70,16 @@ efuses = {
     "IMS5": 0x00000000,
     "IMS6": 0x00000000,
     "IMS7": 0x00000000,
-    "IMS8": 0x00000000}
+    "IMS8": 0x00000000,
+    "CMS0": 0x00000000,
+    "CMS1": 0x00000000,
+    "CMS2": 0x00000000,
+    "CMS3": 0x00000000,
+    "CMS4": 0x00000000,
+    "CMS5": 0x00000000,
+    "CMS6": 0x00000000,
+    "SCR": 0x00000000,
+    "JTAG_CONTROL": 0x00000000}
 
 # AdaFruit FT232H GPIO pins.
 # Pins 0 to 7  = D0 to D7.
@@ -157,6 +166,8 @@ def create_jlink_scripts(script_path, binfile, efuses):
         fd.write("w4 0x40084118 0x{0:08x}\n".format(efuses["IMS6"]))
         fd.write("w4 0x4008411c 0x{0:08x}\n".format(efuses["IMS7"]))
         fd.write("w4 0x40084120 0x{0:08x}\n".format(efuses["IMS8"]))
+
+        # Note: CMS, SCR and JTAG_CONTROL not used
 
         # Pulse the Cortex reset
         fd.write("w4 0x40000000 0x1\n")
