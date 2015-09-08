@@ -88,5 +88,6 @@ def parse_efuse(efuse_filename):
                         set_efuse(reg, values[0])
                     else:
                         for i, val in enumerate(values):
+                            val = val.lstrip("x")
                             regname = "{0:s}{1:d}".format(reg, max_index - i)
-                            set_efuse(regname, values[i])
+                            set_efuse(regname, val)
