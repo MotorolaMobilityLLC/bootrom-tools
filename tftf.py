@@ -805,7 +805,7 @@ class Tftf:
                  format(prefix, base_offset + TFTF_HDR_OFF_LOAD_BASE))
         wf.write("{0:s}expanded_length  {1:08x}\n".
                  format(prefix, base_offset + TFTF_HDR_OFF_EXPANDED_LENGTH))
-        wf.write("{0:s}star_location  {1:08x}\n".
+        wf.write("{0:s}start_location  {1:08x}\n".
                  format(prefix, base_offset + TFTF_HDR_OFF_START_LOCATION))
         wf.write("{0:s}unipro_mfgr_id  {1:08x}\n".
                  format(prefix, base_offset + TFTF_HDR_OFF_UNIPRO_MFGR_ID))
@@ -813,7 +813,7 @@ class Tftf:
                  format(prefix, base_offset + TFTF_HDR_OFF_UNIPRO_PRODUCT_ID))
         wf.write("{0:s}ara_vendor_id  {1:08x}\n".
                  format(prefix, base_offset + TFTF_HDR_OFF_ARA_VENDOR_ID))
-        wf.write("{0:s}ara_producgt_id  {1:08x}\n".
+        wf.write("{0:s}ara_product_id  {1:08x}\n".
                  format(prefix, base_offset + TFTF_HDR_OFF_ARA_PRODUCT_ID))
 
         # Dump the section descriptors (used and free)
