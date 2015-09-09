@@ -30,10 +30,16 @@
 
 from __future__ import print_function
 import os
+import sys
 import argparse
 import shlex
 from util import error, print_to_error
 import subprocess
+
+# Program return values
+PROGRAM_SUCCESS = 0
+PROGRAM_WARNINGS = 1
+PROGRAM_ERRORS = 2
 
 OFFSET_HELP = """The offset from the start of the file
 It may be specified as any of:
@@ -131,30 +137,54 @@ def write_test_term(f_test, tag, value):
 
 
 def process_1_desc(test_args, patch_file, f_test, test_path, bin_pathname,
-                   bin_file, map_pathname):
+                   flash_pathname, map_pathname):
     """Process a single test descriptor
 
-    From the parsed test_args, it will generate a 1-line entry in
-    the test file (using the f_test descriptor). It also generates
-    a modified <BootRom>.bin file, called <BootRom>-<TestName>.bin,
-    in the folder referenced by test_path. The map_pathanme, if
-    present, is passed on to hexpatch.
+    From the parsed test_args, it will generate a 1-line entry in the test
+    file. It also copies the bootrom bin file and the Flash image file to
+    the test folder. If "patch_file" is true, it copies the flash file to
+    the test folder with a test-specific name (Flash.bin =>
+    Flash-TestName>.bin) to which it applies the patches specified in the
+    test_args.
+
+    test_args
+        The test arguments parsed by process_desc_file for one test
+    patch_file
+        Indicates if the flash file is copied or copied and modified
+    f_test
+        The file descriptor of the test suite file.
+    test_path
+        The path to the test folder to generate and populate with the test
+        suite
+    bin_pathanme
+        The pathname of the bootrom image
+    flash_pathname
+        The pathname of the default flash image file
+    map_pathname
+        The pathname of the .map file (used to patch the flash image).
+        (This may be None if no patches are applied)
     """
-    (name, extension) = bin_file.rsplit(".")
+    # Create a test-specific version of the bootrom .bin file
+    tail = os.path.basename(bin_pathname)
+    test_bin_pathname = os.path.join(test_path, tail)
+
+    # Create a test-specific version of the flash image file
+    (head, tail) = os.path.split(flash_pathname)
+    (root, ext) = os.path.splitext(tail)
     if patch_file:
-        testname = name + "-" + test_args.testname + "." + extension
-        altered_bin_pathname = os.path.join(test_path, testname)
+        testname = root + "-" + test_args.testname + ext
+        test_flash_pathname = os.path.join(test_path, testname)
     else:
-        altered_bin_pathname = os.path.join(test_path, bin_file)
+        test_flash_pathname = os.path.join(test_path, tail)
 
-    # Generate the test bin file
-    # For now, simply shell out.
-    # TODO: make hexpatch a callable library
-    subprocess.call(["cp", bin_pathname, altered_bin_pathname])
+    # Copy the test bin file
+    subprocess.check_call(["cp", bin_pathname, test_bin_pathname])
 
+    # Copy and optionally patch the test flash file
+    subprocess.check_call(["cp", flash_pathname, test_flash_pathname])
     if patch_file:
-        cmdline = ["hexpatch", "--file", bin_pathname,
-                   "--out", altered_bin_pathname,
+        cmdline = ["hexpatch", "--file", flash_pathname,
+                   "--out", test_flash_pathname,
                    "--offset", test_args.offset]
         if map_pathname:
             cmdline += ["--map",  map_pathname]
@@ -168,13 +198,13 @@ def process_1_desc(test_args, patch_file, f_test, test_path, bin_pathname,
         # action)
         for byte in test_args.replacement_bytes:
             cmdline += ["{0:02x}".format(byte)]
-        subprocess.call(cmdline)
+        subprocess.check_call(cmdline)
 
     # Generate the test file entry
     write_test_term(f_test, "-t", test_args.testname)
     if test_args.description:
         write_test_term(f_test, "-d", test_args.description)
-    write_test_term(f_test, "-b", altered_bin_pathname)
+    write_test_term(f_test, "-b", test_bin_pathname)
     if test_args.efuse:
         write_test_term(f_test, "-e", test_args.efuse)
     if test_args.pass_str:
@@ -186,13 +216,28 @@ def process_1_desc(test_args, patch_file, f_test, test_path, bin_pathname,
     f_test.write("\n")
 
 
-def process_desc_file(desc_pathname, map_pathname, bin_pathname,
-                      test_path, test_file):
+def process_desc_file(desc_pathname, flash_pathname, map_pathname,
+                      bin_pathname, test_path, test_file):
     """Process the test descriptor file
 
     Processes the test descriptor file, generating an output .test file
     in the folder referenced by test_path, and a set of modified
     BootRom.bin files.
+
+    desc_pathname
+        The pathname to the test suite descriptor file to parse
+    flash_pathname
+        The pathname of the default flash image file
+    map_pathname
+        The pathname of the .map file (used to patch the flash image).
+        (This may be None if no patches are applied by any of the tests)
+    bin_pathanme
+        The pathname of the bootrom image
+    test_path
+        The path to the test folder to generate and populate with the test
+        suite
+    test_file
+        The name of the test suite file proper
     """
     # Set up the test descriptor parser
     parser = argparse.ArgumentParser()
@@ -244,15 +289,12 @@ def process_desc_file(desc_pathname, map_pathname, bin_pathname,
     # Create the test folder if needed
     if not os.path.isdir(test_path):
         os.makedirs(test_path)
-    test_pathname = test_path + test_file
+    test_pathname = os.path.join(test_path, test_file)
 
-    # Extract the image file name from the bin_pathname
-    bin_file = os.path.basename(bin_pathname)
-
-    # Extract the test descriptor file name for use in error messages
+    # Extract the name of the test descriptor file
     script = os.path.basename(desc_pathname)
 
-    # Now parse and process each line in the test descriptor file
+    # Now parse and process each line in the test suite descriptor file
     with open_rw_file_pair(desc_pathname, test_pathname) as (f_desc, f_test):
         line_num = 1
         for line in f_desc:
@@ -262,14 +304,14 @@ def process_desc_file(desc_pathname, map_pathname, bin_pathname,
             if test_descriptor:
                 parser.prog = "{0:s} (line {1:d})".format(script, line_num)
                 test_args = parser.parse_args(test_descriptor)
-                patch_file = have_patching_args(test_args)
+                patch_file = have_patching_args(test_args) and map_pathname
                 error_string = validate_test_args(test_args, patch_file)
                 if error_string:
                     error("(line {0:d}) {1:s}:".format(line_num, error_string))
                     print_to_error(line)
                 else:
                     process_1_desc(test_args, patch_file, f_test, test_path,
-                                   bin_pathname, bin_file, map_pathname)
+                                   bin_pathname, flash_pathname, map_pathname)
             line_num += 1
 
 
@@ -295,18 +337,25 @@ def main():
                         help="The BootRom.bin pathname from which "
                              "altered copies are made")
 
-    parser.add_argument("--map", "-m",
-                        help="The .map file which provides symbolic offsets")
+    parser.add_argument("--flash", "-f",
+                        required=True,
+                        help="The flash image to (modify and) load")
 
     args = parser.parse_args()
 
-    # Ensure that the output path ends in a slash for ease of concatenation
-    if args.out_folder[-1] != "/":
-        args.out_folder += "/"
+    # Locate the flash image's map file. This is passed down to "hexpatch",
+    # which opens/uses it. This is simply a pre-check to avoid doing a lot
+    # of fruitless work. If the file should be deleted between this test and
+    # it being used by hexpatch, hexpatch will handle it.
+    (root, ext) = os.path.splitext(args.flash)
+    map_pathname = root + ".map"
+    if not os.path.isfile(map_pathname):
+        error("No map file found with", args.flash)
+        sys.exit(PROGRAM_ERRORS)
 
     try:
-        process_desc_file(args.desc, args.map, args.bin, args.out_folder,
-                          args.test)
+        process_desc_file(args.desc, args.flash, map_pathname, args.bin,
+                          args.out_folder, args.test)
     except:
         error("Unable to generate test file suite")
         raise

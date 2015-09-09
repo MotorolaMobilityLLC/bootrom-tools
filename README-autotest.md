@@ -225,10 +225,10 @@ file:
 ### 3. Create the Test Suite
 Use *create-bootrom-test-suite* to generate your test suite file.
 
-    create-bootrom-test-suite --bin build/foo.ffff --map build/foo.map \
+    create-bootrom-test-suite --bin bootrom.bin --flash build/ffff.bin \
       --desc test.tss --out_folder ./Test2 --test test.ts
-* `--bin`: The FFFF file created in step 2.
-* `--map`: The map file created in step 2.
+* `--bin`: The bootrom bin file.
+* `--flash`: The FFFF file created in step 2.
 * `--desc`: The test script script created in step 1.
 * `--out_folder`: The test suite folder to create/populate.
 * `--test`: The name of the test suite file to generate in the test
