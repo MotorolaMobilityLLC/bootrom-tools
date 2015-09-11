@@ -34,9 +34,33 @@ import os
 import argparse
 import errno
 from util import warning, error, print_to_error
-#from string import split
 
-OFFSET_HELP = """The offset from the start of the file
+
+# Patching operators
+OP_UNKNOWN = 0
+OP_AND = 1
+OP_OR = 2
+OP_XOR = 3
+OP_REPLACE = 4
+OP_VERIFY = 5
+OP_COPY = 6
+OP_SET = 7
+operator_names = {
+    "and": OP_AND,
+    "or": OP_OR,
+    "xor": OP_XOR,
+    "replace": OP_REPLACE,
+    "rep": OP_REPLACE,
+    "r": OP_REPLACE,
+    "verify": OP_VERIFY,
+    "copy": OP_COPY,
+    "set": OP_SET,
+}
+
+
+PATCH_HELP = \
+    """Patch <offset> [and | or | xor | rep(lace)] <byte>... {verify <byte>...}
+The offset from the start of the file
 It may be specified as any of:
     num
     num+num
@@ -59,40 +83,6 @@ def validate_args(args):
     if not args.map:
         warning("No map file specified")
 
-    if not args.replace:
-        error("No new bytes specified")
-        return False
-    else:
-        num_new_bytes = len(args.replace)
-        for num in args.replace:
-            if not (0 <= num < 256):
-                error("Replace byte", num, "out of range")
-                return False
-
-    new_byte_modes = 0
-    if args.xor_with:
-        new_byte_modes += 1
-
-    if args.or_with:
-        new_byte_modes += 1
-
-    if args.and_with:
-        new_byte_modes += 1
-
-    if new_byte_modes > 1:
-        error("Only one of -x, -o, or -a are allowed")
-        return False
-
-    if args.verify:
-        if len(args.verify) != num_new_bytes:
-            error("The number of verify bytes must match "
-                  "the number of new bytes")
-            return False
-        for num in args.verify:
-            if not (0 <= num < 256):
-                error("Verify byte", num, "out of range")
-                return False
-
     return True
 
 
@@ -114,7 +104,8 @@ def find_symbolic_offset(symbol_name, map_file=None):
                 except:
                     raise ValueError("Invalid offset:", parts[1])
         # Fell through without finding the symbol
-        raise ValueError("symbol not found")
+        raise ValueError("symbol '{0:s}' not found in {1:s}".
+                         format(symbol_name, map_file))
 
 
 def parse_offset(offset_string, map_file=None):
@@ -151,7 +142,18 @@ def parse_offset(offset_string, map_file=None):
     return base_offset + offset
 
 
-def patch(args, base_offset):
+def parse_byte(byte_str):
+    try:
+        byte = int(byte_str, 16)
+    except ValueError:
+        print_to_error("Byte {0:s} is not a hex number".format(byte_str))
+        raise
+    if (byte < 0) or (byte > 0xff):
+        raise ValueError("Byte {0:s} out of range".format(byte_str))
+    return byte
+
+
+def patch(args):
     """ Apply the args to patch the file
 
     Returns False if it failed (optional) verification, True if it succeeded,
@@ -166,32 +168,61 @@ def patch(args, base_offset):
         blob = bytearray(size)
         patch_file.readinto(blob)
 
-    # Apply the patch
-    for offset, byte in enumerate(args.replace):
-        if args.xor_with:
-            blob[base_offset + offset] ^= byte
-        elif args.or_with:
-            blob[base_offset + offset] |= byte
-        elif args.and_with:
-            blob[base_offset + offset] &= byte
+    # Apply each patch
+    for patch in args.patch:
+        if patch[0] in operator_names:
+            operator = operator_names[patch[0]]
         else:
-            blob[base_offset + offset] = byte
+            raise ValueError("Unknown bitwise operator '{0:s}'".
+                             format(patch[0]))
+        base_offset = parse_offset(patch[1], args.map)
 
-    # Verify the patch (generally relevant only with "replace" mode)
-    if args.verify:
-        for offset, byte in enumerate(args.verify):
-            if blob[base_offset + offset] == byte:
-                error("Verification failed")
-                return False
+        bytes = patch[2:]
+        if (operator == OP_AND) or (operator == OP_OR) or \
+           (operator == OP_XOR) or (operator == OP_REPLACE) or \
+           (operator == OP_VERIFY):
+            # Normal operations are <op> <offset> <byte>...
+            for offset, byte_str in enumerate(bytes):
+                 # Normal patch processing of bytes
+                byte = parse_byte(byte_str)
+                if operator == OP_XOR:
+                    blob[base_offset + offset] ^= byte
+                elif operator == OP_OR:
+                    blob[base_offset + offset] |= byte
+                elif operator == OP_AND:
+                    blob[base_offset + offset] &= byte
+                elif operator == OP_REPLACE:
+                    blob[base_offset + offset] = byte
+                else:  # operator == OP_VERIFY:
+                    if blob[base_offset + offset] == byte:
+                        error("Verification failed")
+                        return False
+        elif operator == OP_COPY:
+            # (Mem)Copy operations are:
+            #      <op> <dst_offset> <src_offset> <count>...
+            if len(bytes) != 2:
+                raise ValueError("Incorrect number of copy parameters: {0:s}".
+                                 format(patch))
+            src_offset = parse_offset(bytes[0], args.map)
+            count = int(bytes[1])
+            # Assume the regions don't overlap (TODO: fix later)
+            for offset in range(0, count):
+                blob[base_offset + offset] = blob[src_offset + offset]
+        else:  # operator == OP_SET
+            # (Mem)Set operations are <op> <dst_offset> <byte> <count>...
+            if len(bytes) != 2:
+                raise ValueError("Incorrect number of set parameters: {0:s}".
+                                 format(patch))
+            byte = parse_byte(bytes[0])
+            count = int(bytes[1])
+            for offset in range(0, count):
+                blob[base_offset + offset] = byte
 
     # Write the file
     if not args.out:
         args.out = args.file
     with open(args.out, 'wb') as patch_file:
         patch_file.write(blob)
-
-    print_to_error("Patched {0:d} bytes at 0x{1:x} in {2:s}".
-                   format(len(args.replace), base_offset, args.out))
     return True
 
 
@@ -211,33 +242,10 @@ def main():
     parser.add_argument("--out",
                         help="The output file (default: --file")
 
-    parser.add_argument("--offset", "-f",
-                        help=OFFSET_HELP)
-
-    # Specify the altering bytes
-    parser.add_argument("replace",
+    parser.add_argument("--patch", "-p",
+                        action="append",
                         nargs='*',
-                        type=auto_int,
-                        help="New hex bytes with which to patch the file")
-
-    # Flags args
-    parser.add_argument("--xor_with", "-x",
-                        action='store_true',
-                        help="XOR the new bytes with the existing bytes")
-
-    parser.add_argument("--or_with", "-o",
-                        action='store_true',
-                        help="OR the new bytes with the existing bytes")
-
-    parser.add_argument("--and_with", "-a",
-                        action='store_true',
-                        help="AND the new bytes with the existing bytes")
-
-    # Specify the verification bytes
-    parser.add_argument("--verify", "-v",
-                        nargs='*',
-                        type=auto_int,
-                        help="Verify against the following old bytes (in hex)")
+                        help=PATCH_HELP)
 
     args = parser.parse_args()
 
@@ -247,9 +255,13 @@ def main():
         sys.exit(errno.EINVAL)
 
     try:
-        patch(args, parse_offset(args.offset, args.map))
+        patch(args)
+    except ValueError as e:
+        print_to_error("Value Error: {0}".format(e))
+    except IOError as e:
+        print_to_error("I/O Error: {0}".format(e))
     except:
-        error("Unable to patch file")
+        error("Unknown error")
         raise
 
 

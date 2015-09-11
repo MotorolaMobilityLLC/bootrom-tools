@@ -133,14 +133,27 @@ These additional parameters are used to generate the modified binaries:
 * `-b <bin_file>`: Pathname to the original BootRom image, from which the
 modified versions will be patched. The modified binary images' names are a
 concatenation of this name and the test name.
-* `-z <offset>`: Patch the byte(s) at the specified offset. The offset
-from start-of-file can be expressed as any of the following 4 forms:
+* `--patch <operator> <offset> <byte>...`:
+Patch the byte(s) in the Flash image file at the specified offset. The patched
+image is saved in the test folder with a decorated name (<FlashName>-<testname>.<ext>)
+The offset is from start-of-file can be expressed as any of the following 4 forms:
     * **hex_number**: Absolute offset
     * **hex_number+hex_number**: Relative offset from an absolute base
     * **symbol**: Absolute offset, using symbol from map file (see *hexpatch*)
     * **symbol+hex_number**: Relative offset from an absolute symbolic base
-* `-r|-o|-x|-a <hex_byte_value>...`: **R**eplace/**O**R/**X**OR/**A**ND
-the byte(s) at `<offset>` with the supplied replacement byte(s)
+
+The operator can be one of "and", "or", "xor", "rep(lace") or "verify" and
+is followed by one or more hexadecimal byte values. The bytes are applied with
+the appropriate operator. (In the case of "verify", these are comparison bytes,
+and all file bytes must be different from the verify bytes for it to be
+considered a "pass".)
+
+* `--patch copy <dst_offset> <src_offset> <count>`:
+This is equivalent to memcpy. Currently, the regions must not overlap.
+* `--patch set <offset> <byte> <count>`:
+This is equivalent to memset and sets a region to a constant byte value.
+
+The test line can contain multiple --patch elements.
 
 # Workflow
 This set of tools is intended for batch operation of test suites, as
@@ -193,9 +206,9 @@ by adding the `--log` parameter:
 Create a file (e.g., test.tss) with the following content on each line:
 
     -t BadSentinel -d "#1, of items" -f "Hello world from 2nd stage FW" \
-      -z ffff[0].sentinel+1 -x 05
+      --patch ffff[0].sentinel+1 xor 05 fe
     -t BadTailSentinel  -f "Hello world from 2nd stage FW" -f "yabba" \
-      -f dabba -f do -z ffff[0].tail_sentinel+1 -x 05 #comment
+      -f dabba -f do --patch ffff[0].tail_sentinel+1 xor 05 #comment
 
 This test suite script has 2 tests (one per line) which test whether or not the
 BootRom will detect corrupted FFFF sentinels. The first line checks for a bad
@@ -205,8 +218,8 @@ sentinel at the start of the FFFF header:
 * `-d "#1, of items"` Supplies a description for the BadSentinel test
 * `-f "Hello world from 2nd stage FW"`: Since the BootRom should fail with a
 bad sentinel, we set a failure string to be the successfully-booted string
-* `-z ffff[0].sentinel+1`: Patch the 2nd byte of the sentile by...
-* `-x 05`: ...XORing it with 0x05.
+* `- ffff[0].sentinel+1 xor 05 fe`: Patch the 2nd and 3rd bytes of the sentinel 
+by XORing them with 0x05 and 0xfe.
 * `#comment`: Everything from the '#' to the end of the line is ignored.
 
 The second line tests a corrupted tail sentinel. In real life it would be

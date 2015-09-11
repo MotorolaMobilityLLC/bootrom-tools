@@ -47,7 +47,17 @@ It may be specified as any of:
     num+num
     symbol
     symbol+num
+
 (All numbers are in hex, 'symbol' requires --map)"""
+PATCH_HELP = \
+    """Patch <offset> [and | or | xor | rep(lace)] <byte>... {verify <byte>...}
+The offset from the start of the file
+It may be specified as any of:
+    num
+    num+num
+    symbol
+    symbol+num
+(All numbers are in hex)"""
 
 
 class open_rw_file_pair():
@@ -75,10 +85,10 @@ def have_patching_args(test_args):
 
     Returns True if the file will be patched, False otherwise.
     """
-    # Normally we will be patching the binary. However, some tests (e.g.,
-    # the e-Fuse test set) use stock images with different e-Fuse preloads
-    if test_args.replace_with or test_args.xor_with or test_args.or_with or \
-       test_args.and_with or test_args.replacement_bytes or test_args.offset:
+    # Normally we will be patching the Flash image. However, some tests,
+    # like the e-Fuse test set use stock images with different e-Fuse
+    #preloads.
+    if test_args.patch:
         return True
     else:
         return False
@@ -89,33 +99,6 @@ def validate_test_args(test_args, patch_file):
 
     Returns None if the args are valid, or a string if invalid.
     """
-    # Normally we will be patching the binary. However, some tests (e.g.,
-    # the e-Fuse test set) use stock images with different e-Fuse preloads
-    if patch_file:
-        # Check that there is exactly one file modification action
-        new_byte_modes = 0
-        if test_args.replace_with:
-            new_byte_modes += 1
-        if test_args.xor_with:
-            new_byte_modes += 1
-        if test_args.or_with:
-            new_byte_modes += 1
-        if test_args.and_with:
-            new_byte_modes += 1
-
-        if new_byte_modes < 1:
-            return "You must specify an action (-r, -x, -o, or -a)"
-        elif new_byte_modes > 1:
-            return "Only one of -r, -x, -o, or -a are allowed"
-
-        # Check that we have replacement bytes with which to alter the bin file
-        if not len(test_args.replacement_bytes):
-            return "No new bytes specified"
-
-        # Check that they specified where in the bin file to patch
-        if not test_args.offset:
-            return "--offset/-z is required"
-
     # Check that they have specified test pass/fail criteria
     if not test_args.pass_str and not test_args.fail_str:
         return "you must have a pass or a fail string"
@@ -184,20 +167,13 @@ def process_1_desc(test_args, patch_file, f_test, test_path, bin_pathname,
     subprocess.check_call(["cp", flash_pathname, test_flash_pathname])
     if patch_file:
         cmdline = ["hexpatch", "--file", flash_pathname,
-                   "--out", test_flash_pathname,
-                   "--offset", test_args.offset]
+                   "--out", test_flash_pathname]
+        for patch in test_args.patch:
+            cmdline.append("--patch")
+            for field in patch:
+                cmdline.append(field)
         if map_pathname:
             cmdline += ["--map",  map_pathname]
-        if test_args.xor_with:
-            cmdline += ["-x"]
-        elif test_args.or_with:
-            cmdline += ["-o"]
-        elif test_args.and_with:
-            cmdline += ["-a"]
-        # (There's no test for "replace" because that is hexpatch's default
-        # action)
-        for byte in test_args.replacement_bytes:
-            cmdline += ["{0:02x}".format(byte)]
         subprocess.check_call(cmdline)
 
     # Generate the test file entry
@@ -248,8 +224,10 @@ def process_desc_file(desc_pathname, flash_pathname, map_pathname,
     parser.add_argument("--description", "-d",
                         help="The test description")
 
-    parser.add_argument("--offset", "-z",
-                        help=OFFSET_HELP)
+    parser.add_argument("--patch",
+                        action="append",
+                        nargs='*',
+                        help=PATCH_HELP)
 
     parser.add_argument("--pass_str", "-p",
                         action="append",
@@ -263,29 +241,6 @@ def process_desc_file(desc_pathname, flash_pathname, map_pathname,
                         help="The pathname of the e-Fuse file"
                         "(overrides default e-Fuse file)")
 
-    # Flags args
-    parser.add_argument("--replace_with", "-r",
-                        action='store_true',
-                        help="XOR the new bytes with the existing bytes")
-
-    parser.add_argument("--xor_with", "-x",
-                        action='store_true',
-                        help="XOR the new bytes with the existing bytes")
-
-    parser.add_argument("--or_with", "-o",
-                        action='store_true',
-                        help="OR the new bytes with the existing bytes")
-
-    parser.add_argument("--and_with", "-a",
-                        action='store_true',
-                        help="AND the new bytes with the existing bytes")
-
-    # Specify the altering bytes
-    parser.add_argument("replacement_bytes",
-                        nargs='*',
-                        type=auto_int,
-                        help="New hex bytes with which to patch the file")
-
     # Create the test folder if needed
     if not os.path.isdir(test_path):
         os.makedirs(test_path)
@@ -297,10 +252,23 @@ def process_desc_file(desc_pathname, flash_pathname, map_pathname,
     # Now parse and process each line in the test suite descriptor file
     with open_rw_file_pair(desc_pathname, test_pathname) as (f_desc, f_test):
         line_num = 1
+        parse_line = ""
         for line in f_desc:
+            # Handle continuation lines
+            line = line.rstrip()
+            if (len(line) >=1) and (line[-1] == "\\"):
+                parse_line += line[0:-1]
+                # Note that, while we keep the line number correct, parsing
+                # errors will be displaced to the last line number of a
+                # continued line.
+                line_num += 1
+                continue
+            else:
+                parse_line += line
+
             # Chop each line into a list, stripping comments and
             # preserving quoted strings
-            test_descriptor = shlex.split(line, True)
+            test_descriptor = shlex.split(parse_line, True)
             if test_descriptor:
                 parser.prog = "{0:s} (line {1:d})".format(script, line_num)
                 test_args = parser.parse_args(test_descriptor)
@@ -308,11 +276,17 @@ def process_desc_file(desc_pathname, flash_pathname, map_pathname,
                 error_string = validate_test_args(test_args, patch_file)
                 if error_string:
                     error("(line {0:d}) {1:s}:".format(line_num, error_string))
-                    print_to_error(line)
+                    print_to_error(parse_line)
                 else:
-                    process_1_desc(test_args, patch_file, f_test, test_path,
-                                   bin_pathname, flash_pathname, map_pathname)
+                    try:
+                        process_1_desc(test_args, patch_file, f_test,
+                                       test_path, bin_pathname,
+                                       flash_pathname, map_pathname)
+                    except:
+                        print_to_error("Error on line", line_num, "of",
+                                       os.path.basename(desc_pathname))
             line_num += 1
+            parse_line = ""
 
 
 def main():
