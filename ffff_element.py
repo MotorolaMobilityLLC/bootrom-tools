@@ -53,12 +53,12 @@ FFFF_MAX_HEADER_BLOCK_OFFSET = (512 * 1024)
 FFFF_HEADER_COLLISION = -1
 
 # FFFF Element types (see: ffff_element.element_type)
-FFFF_ELEMENT_END_OF_ELEMENT_TABLE = 0x00
 FFFF_ELEMENT_STAGE2_FIRMWARE_PACKAGE = 0x01
 FFFF_ELEMENT_STAGE3_FIRMWARE_PACKAGE = 0x02
 FFFF_ELEMENT_IMS_CERTIFICATE = 0x03
 FFFF_ELEMENT_CMS_CERTIFICATE = 0x04
 FFFF_ELEMENT_DATA = 0x05
+FFFF_ELEMENT_END_OF_ELEMENT_TABLE = 0xfe
 
 # FFFF signature block field sizes
 FFFF_SIGNATURE_KEY_NAME_LENGTH = 64
@@ -209,6 +209,10 @@ class FfffElement:
         #
         # Returns True if valid, False otherwise
 
+        # EOT is always valid
+        if self.element_type == FFFF_ELEMENT_END_OF_ELEMENT_TABLE:
+            return True
+
         # Do we overlap the header
         self.in_range = self.element_location >= address_range_low and\
                         self.element_location < address_range_high
@@ -224,7 +228,7 @@ class FfffElement:
             error("Element location " + format(self.element_location, "#x") + \
             " unaligned to block size " + format(self.erase_block_size, "#x"))
         self.valid_type = self.element_type >= \
-            FFFF_ELEMENT_END_OF_ELEMENT_TABLE and \
+            FFFF_ELEMENT_STAGE2_FIRMWARE_PACKAGE and \
             self.element_type <= FFFF_ELEMENT_DATA
         return self.in_range and self.aligned and self.valid_type
 

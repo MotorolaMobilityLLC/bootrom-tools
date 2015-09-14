@@ -226,8 +226,7 @@ class FfffRomimage:
                     element_location, element_length, filename):
         # Add a new element to the element table but don't load the
         # TFTF file into the ROMimage buffer.  This is called for FFFF
-        # creation, and adds the element to both FFFF headers.  It returns
-        # a success flag
+        # creation, and adds the element to both FFFF headers.
         if self.ffff0 and self.ffff1:
             return \
                 self.ffff0.add_element(element_type, element_id,

@@ -100,6 +100,11 @@ class Ffff:
         self.element_location_min = 2 * self.header_block_size()
         self.element_location_max = image_length
 
+        # Salt the element table with the end-of-table, because we will be
+        # adding sections manually later
+        self.add_element(FFFF_ELEMENT_END_OF_ELEMENT_TABLE, 0, 0, 0, 0, None)
+
+
     def header_block_size(self):
         return header_block_size(self.erase_block_size)
 
@@ -185,7 +190,8 @@ class Ffff:
         (We would typically be called by "create-ffff" after parsing element
         parameters.)
         """
-        if len(self.elements) < FFFF_MAX_ELEMENTS:
+        num_elements = len(self.elements)
+        if num_elements < FFFF_MAX_ELEMENTS:
             element = FfffElement(len(self.elements),
                                   self.ffff_buf,
                                   self.flash_capacity,
@@ -196,8 +202,16 @@ class Ffff:
                                   element_location,
                                   element_length,
                                   filename)
+            if element_type == FFFF_ELEMENT_END_OF_ELEMENT_TABLE:
+                if num_elements == 0:
+                    # Special case, add the EOT element
+                    self.elements.append(element)
+                return True
+
             if element.init():
-                self.elements.append(element)
+                # Because the table always ends in a EOT entry, we "append"
+                # new elements by inserting them just before the EOT element.
+                self.elements.insert(num_elements - 1, element)
 
                 span_start = element.element_location
                 span_end = span_start + len(element.tftf_blob.tftf_buf)
@@ -351,6 +365,8 @@ class Ffff:
         # Elements are concatenated at the granuarity of the erase block size
         location = self.elements[0].element_location
         for element in self.elements:
+            if element.element_type == FFFF_ELEMENT_END_OF_ELEMENT_TABLE:
+                break
             if element.element_location == 0:
                 element.element_location = location
                 error("Note: Assuming element [{0:d}]"
