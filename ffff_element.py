@@ -350,9 +350,9 @@ class FfffElement:
 
         Print an element header's TFTF info
         """
-
-        self.tftf_blob.display("element [{0:d}]".format(self.index), "  ")
-        self.tftf_blob.display_data("element [{0:d}]".format(self.index), "  ")
+        if self.element_type != FFFF_ELEMENT_END_OF_ELEMENT_TABLE: 
+            self.tftf_blob.display("element [{0:d}]".format(self.index), "  ")
+            self.tftf_blob.display_data("element [{0:d}]".format(self.index), "  ")
 
     def write_map_payload(self, wf,  base_offset, prefix=""):
         """Display the field names and offsets of a single FFFF header"""
@@ -364,7 +364,7 @@ class FfffElement:
         if self.tftf_blob:
             # We've got a TFTF, pass that on to TFTF to display
             self.tftf_blob.write_map(wf, self.element_location, elt_name)
-        else:
+        elif self.element_type != FFFF_ELEMENT_END_OF_ELEMENT_TABLE:
             # Just print the element payload location
             wf.write("{0:s}  {1:08x}\n".
                      format(prefix, self.element_location))

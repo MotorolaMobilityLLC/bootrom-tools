@@ -1,0 +1,7 @@
+Hello world from boot ROM!
+FFFF Bad head sentinel
+No 1st FFFF table
+FFFF Bad head sentinel
+No FFFF tables
+Boot failed (status 81000049), halting
+

@@ -1,0 +1,221 @@
+#!/bin/bash
+#
+# Copyright (c) 2015 Google Inc.
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+# 1. Redistributions of source code must retain the above copyright notice,
+# this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+# this list of conditions and the following disclaimer in the documentation
+# and/or other materials provided with the distribution.
+# 3. Neither the name of the copyright holder nor the names of its
+# contributors may be used to endorse or promote products derived from this
+# software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+# THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+# OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+# WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+# ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+#------------------------------------------------------------------------------
+# Make all 3 images, their TFTF files, and bundle into an FFFF file.
+#
+# Usage:
+#    makeall {-es2tsb | -es3tsb | -fpgatsb } {-v}
+#
+#    -es2tsb, -es3tsb, -fpgatsb
+#                        Select the build target
+#    -v                  Verbose mode on TFTF creation
+#------------------------------------------------------------------------------
+BuildRoot=~/work/bootrom
+BuildDir=~/work/bootrom/build
+BinDir=~/work/bootrom/binary
+KeyDir=~/bin
+AssyDir=~/bootrom-tools/es3-test
+DropDir=~/es3-test
+
+#-----
+# Process any args
+#-----
+for arg in "$@" ; do    # arg will be each positional parameter
+    if [[ ${arg} == "-es2tsb" ]]; then  # select target configuration
+        CONFIG_CHIP=${arg}
+    elif [[ ${arg} == "-es3tsb" ]]; then  # select target configuration
+        CONFIG_CHIP=${arg}
+    elif [[ ${arg} == "-fpgatsb" ]]; then # select target configuration
+        CONFIG_CHIP=${arg}
+    elif [[ ${arg} == "-v" ]]; then       # TFTF verbose mode
+        Verbose=${arg}
+    else
+        echo "unknown arg $arg"
+        exit 1
+    fi
+done
+if [ ! $CONFIG_CHIP ]; then
+    echo "CONFIG_CHIP not set, assuming $DEFAULT_CHIP_CONFIG"
+    CONFIG_CHIP=$DEFAULT_CHIP_CONFIG
+fi
+
+
+# Make sure our target folder exists
+if [ ! -d $AssyDir ]
+then
+    echo "Creating assembly folder: $AssyDir"
+    mkdir $AssyDir
+fi
+if [ ! -d $AssyDir/ffff ]
+then
+    mkdir $AssyDir/ffff
+fi
+if [ ! -d $AssyDir/response-files ]
+then
+    mkdir $AssyDir/response-files
+fi
+if [ ! -d $AssyDir/s1fw ]
+then
+    mkdir $AssyDir/s1fw
+fi
+
+
+
+pushd $BuildRoot
+
+# GBFW server build
+makeserver
+if [[ $? == 0 ]]; then
+    cp $BuildDir/bootrom-gbfw.bin $AssyDir/s1fw
+    cp $BuildDir/bootrom-gbfw.hex $AssyDir/s1fw
+else
+    echo "Problems building GBFW server"
+    popd
+    exit 1
+fi
+
+# Unsigned build
+make3 ${CONFIG_CHIP} $Verbose
+if [[ $? == 0 ]]; then
+    cp $BuildDir/bootrom.bin $AssyDir/s1fw
+    cp $BuildDir/bootrom.hex $AssyDir/s1fw
+    cp $BinDir/ffff.bin $AssyDir/ffff
+    cp $BinDir/ffff.map $AssyDir/ffff
+else
+    echo "Problems building unsigned FFFF"
+    popd
+    exit 1
+fi
+
+# Signed build
+make3 ${CONFIG_CHIP} -sign $Verbose
+if [[ $? == 0 ]]; then
+    cp $BinDir/ffff-s2s3.bin $AssyDir/ffff
+    cp $BinDir/ffff-s2s3.map $AssyDir/ffff
+else
+    echo "Problems building signed FFFF"
+    popd
+    exit 1
+fi
+
+# NoBOU build
+make3 ${CONFIG_CHIP} -nobou $Verbose
+if [[ $? == 0 ]]; then
+    cp $BuildDir/bootrom-nb.bin $AssyDir/s1fw
+    cp $BuildDir/bootrom-nb.hex $AssyDir/s1fw
+else
+    echo "Problems building no-BOU bootloader"
+    popd
+    exit 1
+fi
+
+
+# (Re)create the drop folder
+# Make sure our drop folder exists
+if [ -d $DropDir ]
+then
+    echo "Removing old drop folder: $DropDir"
+    rm -r $DropDir
+fi
+
+if [ ! -d $DropDir ]
+then
+    echo "Creating drop folder: $DropDir"
+    mkdir $DropDir
+fi
+if [ ! -d $DropDir/efuse ]
+then
+    mkdir $DropDir/efuse
+fi
+if [ ! -d $DropDir/ffff ]
+then
+    mkdir $DropDir/ffff
+fi
+if [ ! -d $DropDir/response-files ]
+then
+    mkdir $DropDir/response-files
+fi
+if [ ! -d $DropDir/s1fw ]
+then
+    mkdir $DropDir/s1fw
+fi
+
+# Populate the drop folder
+cp $AssyDir/efuse/* $DropDir/efuse
+cp $AssyDir/ffff/* $DropDir/ffff
+cp $AssyDir/response-files/* $DropDir/response-files
+cp $AssyDir/s1fw/* $DropDir/s1fw
+
+
+
+# Generate the test files in the drop folder
+create-bootrom-test-suite \
+  --bin $AssyDir/s1fw/bootrom.bin \
+  --flash $AssyDir/ffff/ffff-s2s3.bin \
+  --desc $AssyDir/es3.tss \
+  --test es3-trusted.ts \
+  --out_folder $DropDir/ffff
+if [[ $? != 0 ]]; then
+    echo "Problems creating trusted testsuite"
+    popd
+    exit 1
+fi
+
+create-bootrom-test-suite \
+  --bin $AssyDir/s1fw/bootrom.bin \
+  --flash $AssyDir/ffff/ffff.bin \
+  --desc $AssyDir/es3.tss \
+  --test es3-untrusted.ts \
+  --out_folder $DropDir/ffff
+if [[ $? != 0 ]]; then
+    echo "Problems creating untrusted testsuite"
+    popd
+    exit 1
+fi
+
+
+# Create the .hex files for all of the ffff variants
+echo "Generating ffff .hex files..."
+pushd $DropDir/ffff
+for f in *.bin
+do
+    FBase=`basename $f .bin`
+    hexdump -v -e '/1 "%02X\n"' $FBase.bin > $FBase.hex 
+done
+popd
+
+
+# Zip it all up
+echo "Generating drop..."
+Archive="es3-test_`date +%Y%m%d.%H%M.%Z`.tar.gz"
+tar -zcvf ~/$Archive $DropDir
+echo "Dropped to ~/$Archive"
+
+# Done
+popd

@@ -364,23 +364,25 @@ class Ffff:
         # Scan the elements and fill in missing start locations.
         # Elements are concatenated at the granuarity of the erase block size
         location = self.elements[0].element_location
-        for element in self.elements:
+        for index, element in enumerate(self.elements):
+            element.index = index
+            if element.element_type != FFFF_ELEMENT_END_OF_ELEMENT_TABLE:
+                if element.element_location == 0:
+                    element.element_location = location
+                    error("Note: Assuming element [{0:d}]"
+                          " loads at {1:08x}".format(element.index, location))
+                if self.flash_image_length != 0 and \
+                   element.element_location + element.element_length >= \
+                   self.flash_image_length:
+                    error("--element-location " + format(element.element_location, "#x") + \
+                        " + --element-length " + format(element.element_length, "#x") + \
+                        " exceeds --image-length " + format(self.flash_image_length, "#x"))
+                    sys.exit(PROGRAM_ERRORS)
+                location = next_boundary(element.element_location +
+                                         element.element_length,
+                                         self.erase_block_size)
             if element.element_type == FFFF_ELEMENT_END_OF_ELEMENT_TABLE:
                 break
-            if element.element_location == 0:
-                element.element_location = location
-                error("Note: Assuming element [{0:d}]"
-                      " loads at {1:08x}".format(element.index, location))
-            if self.flash_image_length != 0 and \
-               element.element_location + element.element_length >= \
-               self.flash_image_length:
-                error("--element-location " + format(element.element_location, "#x") + \
-                    " + --element-length " + format(element.element_length, "#x") + \
-                    " exceeds --image-length " + format(self.flash_image_length, "#x"))
-                sys.exit(PROGRAM_ERRORS)
-            location = next_boundary(element.element_location +
-                                     element.element_length,
-                                     self.erase_block_size)
 
         if self.flash_image_length == 0:
             self.flash_image_length = location

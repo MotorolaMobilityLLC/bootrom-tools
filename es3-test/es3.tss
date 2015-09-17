@@ -1,0 +1,101 @@
+#
+# Copyright (c) 2015 Google Inc.
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+# 1. Redistributions of source code must retain the above copyright notice,
+# this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+# this list of conditions and the following disclaimer in the documentation
+# and/or other materials provided with the distribution.
+# 3. Neither the name of the copyright holder nor the names of its
+# contributors may be used to endorse or promote products derived from this
+# software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+# THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+# OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+# WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+# ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#------------------------------------------------------------------------------
+# -t TestName	(Scrozzled Flash file will be flashfile-TestName.bin)
+# -d string	(optional) Test description string
+# -e pathname	(optional) Override e-Fuse file
+# --patch Offset	See: "hexpatch"
+# -p string | -f string
+#		The string to find for a pass (-p) or fail (-f).
+#		A line can have only -p or -f, but can have multiple occurrances of them
+# rep|or|xor|-a	Action (Replace, Or, Xor, And)
+# Bytes...	The replacement bytes to which "Action" applies
+
+# EFUSE error group:
+-t LL-00 -e ~/jgdb/zero.efz -p "Hello world from 2nd stage FW"
+-t LL-01 -e ~/jgdb/bad-ims.efz -p "Boot failed (status 81000014"
+-t LL-02 -e ~/jgdb/bad-pid.efz -p "Boot failed (status 81000012"
+-t LL-03 -e ~/jgdb/bad-sn.efz  -p "Boot failed (status 81000013"
+-t LL-04 -e ~/jgdb/bad-vid.efz -p "Boot failed (status 81000011"
+-t LL-05 -e ~/jgdb/ok.efz -p "Boot failed (status 81000011"
+-t LL-06 -e ~/jgdb/toshiba.efz -p "Boot failed (status 81000011"
+
+# FFFF error group:
+#-t LL-07 "status 82000040" requires SPI failure
+-t LL-08 -p "Boot failed (status 82000041" --patch rep ffff[0].header_size ef be ad de \
+    --patch copy ffff[1] ffff[0] 512
+-t LL-09 -p "Boot failed (status 82000043" --patch rep ffff[0].sentinel ef be ad de \
+    --patch copy ffff[1] ffff[0] 512
+-t LL-10 -p "Boot failed (status 82000043" --patch rep ffff[0].tail_sentinel ef be ad de \
+    --patch copy ffff[1] ffff[0] 512
+-t LL-11 -p "Boot failed (status 82000044" \
+    --patch copy ffff[0].element[2].type ffff[0].element[0].type 20 \
+    --patch copy ffff[0].element[3].type ffff[0].element[0].type 60 \
+    --patch copy ffff[0].element[6].type ffff[0].element[0].type 120 \
+    --patch copy ffff[0].element[12].type ffff[0].element[0].type 140 \
+    --patch copy ffff[1] ffff[0] 512
+-t LL-12 -p "Boot failed (status 82000045" --patch rep ffff[0].padding 01 \
+    --patch copy ffff[1] ffff[0] 512
+-t LL-13 -p "Boot failed (status 82000046" --patch rep ffff[0].erase_block_size ff ff 8f 00 \
+    --patch copy ffff[1] ffff[0] 512
+-t LL-14 -p "Boot failed (status 82000047" --patch rep ffff[0].flash_capacity 80 02 00 00 \
+    --patch copy ffff[1] ffff[0] 512
+-t LL-15 -p "Boot failed (status 82000048" --patch rep ffff[0].image_length ff ff ff 80 \
+    --patch copy ffff[1] ffff[0] 512
+-t LL-16 -p "Boot failed (status 82000049" --patch xor ffff[0].sentinel de ad be ef \
+    --patch copy ffff[1] ffff[0] 512
+-t LL-17 -p "Boot failed (status 8200004a" --patch rep ffff.element[0].2fw.section[0].type 02 \
+    --patch rep ffff.element[1].3fw.section[0].type 02
+
+# TFTF error group:
+#-t LL-18 "status 82000020" requires SPI failure
+#-t LL-19 "status 82000021" requires SPI failure
+-t LL-20 -p "Boot failed (status 82000022" --patch or ffff.element[0].2fw.load_base ff ff ff 80 \
+    --patch copy ffff[1] ffff[0] 512
+-t LL-21 -p "Boot failed (status 82000023" --patch rep ffff.element[0].2fw.sentinel ef be ad de \
+    --patch copy ffff[1] ffff[0] 512
+-t LL-22 -p "Boot failed (status 82000024" --patch rep ffff.element[0].2fw.section[2].type 00 \
+    --patch copy ffff[1] ffff[0] 512
+-t LL-23 -p "Boot failed (status 82000025" --patch rep ffff.element[0].2fw.section[3].type 57 \
+    --patch copy ffff[1] ffff[0] 512
+#-t LL-24 "status 82000026" requires SPI failure
+-t LL-25 -p "Boot failed (status 82000027" --patch rep ffff.element[0].2fw.unipro_mfgr_id a6 a6 a6 a6 \
+    --patch copy ffff[1] ffff[0] 512
+-t LL-26 -p "Boot failed (status 82000027" --patch rep ffff.element[0].2fw.unipro_product_id a6 a6 a6 a6 \
+    --patch copy ffff[1] ffff[0] 512
+-t LL-27 -p "Boot failed (status 82000028" --patch rep ffff.element[0].2fw.section[0].type 03 \
+    --patch copy ffff[1] ffff[0] 512
+-t LL-28 -p "Boot failed (status 8200002a" --patch rep ffff.element[0].2fw.section[3].type 05 \
+    --patch rep ffff.element[0].2fw.section[4].type fe \
+    --patch copy ffff[1] ffff[0] 512
+-t LL-29 -p "Boot failed (status 8200002b" --patch rep ffff.element[0].2fw.section[0].type 10 \
+    --patch copy ffff[1] ffff[0] 512
+-t LL-30 -p "Boot failed (status 8200002b" --patch rep ffff.element[0].2fw.section[1].copy_offset 00 80 02 \
+    --patch copy ffff[1] ffff[0] 512
+
+
+

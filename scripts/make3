@@ -1,0 +1,238 @@
+#!/bin/bash
+#
+# Copyright (c) 2015 Google Inc.
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+# 1. Redistributions of source code must retain the above copyright notice,
+# this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+# this list of conditions and the following disclaimer in the documentation
+# and/or other materials provided with the distribution.
+# 3. Neither the name of the copyright holder nor the names of its
+# contributors may be used to endorse or promote products derived from this
+# software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+# THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+# OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+# WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+# ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+#------------------------------------------------------------------------------
+# Make all 3 images, their TFTF files, and  FFFF file, and the GBFW server.
+#
+# Usage:
+#    make3 {{-sim} | [{-sim1} {-sim2} {-sim3}]} \
+#          {{-sign} | [{-s2fw} {-s3fw}]} {-nobou} \
+#          {-es2tsb | -es3tsb | -fpgatsb } \
+#          {-v}
+#
+#    -sim                Enable _SIMULATION mode for all 3 firmware levels
+#    -sim1, -sim2, -sim3 Enable _SIMULATION mode for specific firmware levels
+#    -sign               Sign both level 2 & 3 firmware
+#    -s2fw               Sign the level2 firmware
+#    -s3fw               Sign the level3 firmware
+#    -nobou              Suppress Boot-Over-Unipro
+#    -es2tsb, -es3tsb, -fpgatsb
+#                        Select the build target
+#    -v                  Verbose mode on TFTF creation
+#------------------------------------------------------------------------------
+BuildRoot=~/work/bootrom
+BuildDir=~/work/bootrom/build
+BinDir=~/work/bootrom/binary
+KeyDir=~/bin
+
+#-----
+# Process any args
+#-----
+Sim1=false
+Sim2=false
+Sim3=false
+Sign2FW=false
+Sign3FW=false
+NoBou=false
+for arg in "$@" ; do    # arg will be each positional parameter
+    if [[ ${arg} == "-sign" ]]; then     # Sign the 2nd level Firmware?
+        Sign2FW=true
+        Sign3FW=true
+    elif [[ ${arg} == "-s2fw" ]]; then   # Sign the 2nd level Firmware?
+        Sign2FW=true
+    elif [[ ${arg} == "-s3fw" ]]; then   # Sign the 3rd level Firmware?
+        Sign3FW=true
+    elif [[ ${arg} == "-sim" ]]; then    # Compile all levels for Toshba Simulation
+        Sim1=true
+        Sim2=true
+        Sim3=true
+    elif [[ ${arg} == "-sim1" ]]; then    # Compile 1stFW for Toshba Simulation
+        Sim1=true
+    elif [[ ${arg} == "-sim2" ]]; then    # Compile 2ndFW for Toshba Simulation
+        Sim2=true
+    elif [[ ${arg} == "-sim3" ]]; then    # Compile 3rdFW for Toshba Simulation
+        Sim3=true
+    elif [[ ${arg} == "-nobou" ]]; then   # Suppress Boot-Over-Unipro (BOU)
+        NoBou=true
+        NoBouPreamble="_NOBOU=1"
+        NoBouSuffix="nb"
+    elif [[ ${arg} == "-es2tsb" ]]; then  # select target configuration
+        CONFIG_CHIP="es2tsb"
+    elif [[ ${arg} == "-es3tsb" ]]; then  # select target configuration
+        CONFIG_CHIP="es3tsb"
+    elif [[ ${arg} == "-fpgatsb" ]]; then # select target configuration
+        CONFIG_CHIP="fpgatsb"
+    elif [[ ${arg} == "-v" ]]; then       # TFTF verbose mode
+        Verbose=${arg}
+    else
+        echo "unknown arg $arg"
+        exit 1
+    fi
+done
+if [ ! $CONFIG_CHIP ]; then
+    echo "CONFIG_CHIP not set, assuming $DEFAULT_CHIP_CONFIG"
+    CONFIG_CHIP=$DEFAULT_CHIP_CONFIG
+fi
+
+if $Sign2FW; then
+    Sign2Suffix="s2"
+fi
+if $Sign3FW; then
+    Sign3Suffix="s3"
+fi
+
+
+# Come up with the root name of the FFFF file, amended with any signage
+if $Sign2FW || $Sign3FW ; then
+    FfffSuffix="-$Sign2Suffix$Sign3Suffix"
+else
+    FfffSuffix=""
+fi
+FfffName="ffff$FfffSuffix"
+
+
+# Configure for a specific chip/target
+echo "Building for $CONFIG_CHIP"
+$BuildRoot/configure ${CONFIG_CHIP}
+
+
+
+# Make our scratch folder
+if [ ! -d $BuildRoot/binary ]
+then
+    mkdir $BuildRoot/binary
+fi
+
+pushd $BuildRoot
+
+#-----
+# Make the s3FW
+#-----
+echo "Make 3rd stage..."
+make clean
+if $Sim3; then
+    _SIMULATION=1 make third_stage
+else
+    make third_stage
+fi
+if [[ $? == 0 ]]; then
+    # s3fw tftf
+    create-tftf --code $BuildDir/bootrom.bin --load 0x10000000 --start 0x10000000 --name third --out $BinDir/third.bin --ara-pid 0 --ara-vid 0 $Verbose
+    if [[ $? == 0 ]]; then
+        # Sign s3fw
+        if $Sign3FW; then
+            echo "Sign 3rd stage"
+            sign-tftf --key $KeyDir/key1.pem --type rsa2048-sha256 binary/third.bin
+        fi
+    fi
+fi
+if [[ $? != 0 ]]; then
+    echo "Problems creating s3fw"
+    exit 1
+fi
+
+
+
+#-----
+# Make the s2FW
+#-----
+echo "Make 2nd stage..."
+make clean
+if $Sim2; then
+    _SIMULATION=1 make second_stage
+else
+    make second_stage
+fi
+if [[ $? == 0 ]]; then
+    # 2ndFW tftf
+    create-tftf --elf $BuildDir/bootrom --load 0x10000000 --name second --out $BinDir/second.bin --ara-pid 0 --ara-vid 0 $Verbose
+    if [[ $? == 0 ]]; then
+        # Sign 2nsFW
+        if $Sign2FW; then
+            echo "Sign 2nd stage"
+            sign-tftf --key $KeyDir/key1.pem --type rsa2048-sha256 binary/second.bin
+        fi
+    fi
+fi
+if [[ $? != 0 ]]; then
+    echo "Problems creating s2fw"
+    popd
+    exit 1
+fi
+
+
+
+#-----
+# Make the s1FW (aka BootRom)
+#-----
+echo "Make 1st stage (BootRom)..."
+make clean
+if $Sim1; then
+    if $NoBou; then
+        _NOBOU=1 _SIMULATION=1 make
+    else
+        _SIMULATION=1 make
+    fi
+else
+    if $NoBou; then
+       _NOBOU=1 make
+    else
+        make
+    fi
+fi
+if $NoBou ; then
+    pushd $BuildDir
+    mv bootrom.bin "bootrom-$NoBouSuffix.bin"
+    mv bootrom.hex "bootrom-$NoBouSuffix.hex"
+    popd
+fi
+if [[ $? != 0 ]]; then
+    echo "Problems creating s1fw"
+    popd
+    exit 1
+fi
+
+
+
+
+#-----
+# Bundle it all into the FFFF file
+#-----
+echo "Make the FFFF..."
+create-ffff --s2f $BinDir/second.bin --egen 1 --eloc 0x3000 \
+  --s3f $BinDir/third.bin --egen 1 --eloc 0x1000 --name Firmware \
+  --out $BinDir/$FfffName.bin --flash-capacity 0x40000 --erase-size 0x800 \
+  --image-length 0x8000 --generation 1 --map $Verbose
+if [[ $? != 0 ]]; then
+    echo "Problems creating ffff"
+    popd
+    exit 1
+fi
+
+
+

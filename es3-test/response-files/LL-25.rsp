@@ -1,0 +1,9 @@
+Image does not match our VID/PID
+        __chip__ __tftf__
+U-MID = 00000126 a6a6a6a6
+U-PID = 00001002 00000000
+A-MID = 55555555 00000000
+A-PID = 6a6a6a6a 00000000
+couldn't locate image
+Boot failed (status 82000027), halting
+
