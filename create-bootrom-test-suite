@@ -183,6 +183,8 @@ def process_1_desc(test_args, patch_file, f_test, test_path, bin_pathname,
     write_test_term(f_test, "-b", test_bin_pathname)
     if test_args.efuse:
         write_test_term(f_test, "-e", test_args.efuse)
+    if test_args.response:
+        write_test_term(f_test, "-r", test_args.response)
     if test_args.pass_str:
         for str in test_args.pass_str:
             write_test_term(f_test, "-p", str)
@@ -223,6 +225,9 @@ def process_desc_file(desc_pathname, flash_pathname, map_pathname,
 
     parser.add_argument("--description", "-d",
                         help="The test description")
+
+    parser.add_argument("--response", "-r",
+                        help="Test response file")
 
     parser.add_argument("--patch",
                         action="append",

@@ -87,6 +87,64 @@ def validate_test_args(test_args):
     return None
 
 
+def check_response(capture, response):
+    """ Compare the test capture list against a response list
+
+    The test is considered to be a "pass" if we encounter all the lines in
+    the response list, in sequence, in the capture list.
+    Note that the lines in the response list can be partial lines (i.e., we
+    don't need to do full line comparisons).
+
+    Returns HAPS_MONITOR_PASS or HAPS_MONITOR_FAIL as appropriate.
+    """
+    index = 0
+    for cap in capture:
+        if response[i] in cap:
+            i += 1
+            # If we consumed all the lines in the response list, we've
+            # succeeded
+            if i >= len(response):
+                return HAPS_MONITOR_PASS
+    return HAPS_MONITOR_FAIL
+
+
+def process_response_file(capture, response_file):
+    """ Compare the test capture against a response file
+
+    Returns HAPS_MONITOR_PASS or HAPS_MONITOR_FAIL as appropriate
+    """
+    # Locate the response file
+    (head, tail) = os.path.split(response_file)
+    response_in_test_folder = os.path.join(args.test_pathname, "response-files")
+    response_in_test_folder = os.path.join(response_in_test_folder, tail)
+    # Try to open the file, and if that fails, try appending the
+    # extension.
+    names = (response_file, os.path.join(response_file, ".rsp"),
+             response_in_test_folder, os.path.join(response_in_test_folder, ".rsp")
+    rf = None
+    for name in names:
+        try:
+            with open(name, 'r') as resp:
+                # Read the response file into a list
+                response = []
+                for line in f_desc:
+                    # discard blank lines
+                    line = rstrip(line)
+                    if not line:
+                        continue
+                    response += line  #***** CHECK THIS
+
+                # Run the comparison and return the result
+                return check_response(capture, response)
+            break
+        except:
+            print("can't find response file"), name
+            success = False
+    # Coudln't find the response file, indicate test failure
+    error("Unable to find response file '{0:s'}".format(response_file))
+    return HAPS_MONITOR_FAIL
+
+
 def process_1_test(test_args, test_path, jlink_sn, reset_mode, chipit_tty,
                    efuses, jlink_script_path, dbgser_tty, timeout,
                    stop_strings):
@@ -207,6 +265,9 @@ def process_1_testx(test_args, test_path, jlink_sn, reset_mode, chipit_tty,
                     stop = True
 
         # Test concluded, sort out the results
+        if args.response:
+            reason == process_response_file(capture, args.response)
+
         if reason == HAPS_MONITOR_FAIL:
             # We stop with a 'FAIL on the first fail string
             test_passed = False
@@ -275,6 +336,9 @@ def process_test_file(test_pathname, jlink_sn, reset_mode, chipit_tty,
     parser.add_argument("--bin", "-b",
                         required=True,
                         help="The BootRom.bin file to test")
+
+    parser.add_argument("--response", "-r",
+                        help="test response file")
 
     parser.add_argument("--pass_str", "-p",
                         action="append",
