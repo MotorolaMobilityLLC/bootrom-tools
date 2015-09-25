@@ -37,17 +37,19 @@ from ffff_element import FFFF_HDR_LENGTH, FFFF_HDR_VALID, \
     FFFF_ELT_LENGTH, FFFF_HDR_OFF_FLASH_IMAGE_NAME, \
     FFFF_HDR_OFF_FLASH_CAPACITY, FFFF_FLASH_IMAGE_NAME_LENGTH, \
     FFFF_ELEMENT_END_OF_ELEMENT_TABLE, FFFF_HEADER_COLLISION, \
-    FFFF_HDR_ERASED, FFFF_SENTINEL, \
+    FFFF_HDR_ERASED, FFFF_RSVD_SIZE, FFFF_SENTINEL, \
     FFFF_HDR_INVALID, FFFF_HDR_OFF_PADDING, FFFF_HDR_OFF_SENTINEL, \
     FFFF_HDR_OFF_TIMESTAMP, FFFF_HDR_OFF_ERASE_BLOCK_SIZE, \
     FFFF_HDR_OFF_HEADER_SIZE, FFFF_HDR_OFF_FLASH_IMAGE_LENGTH, \
-    FFFF_HDR_OFF_HEADER_GENERATION_NUM, FFFF_ELT_OFF_TYPE, FFFF_ELT_OFF_ID, \
+    FFFF_HDR_OFF_HEADER_GENERATION_NUM, FFFF_HDR_OFF_RESERVED, \
+    FFFF_ELT_OFF_TYPE, FFFF_ELT_OFF_CLASS, FFFF_ELT_OFF_ID, \
     FFFF_ELT_OFF_GENERATION, FFFF_ELT_OFF_LOCATION, \
-    FFFF_ELT_OFF_LENGTH
+    FFFF_ELT_OFF_LENGTH, FFFF_RESERVED
 import sys
 
 from util import error, is_power_of_2, next_boundary, is_constant_fill, \
-    PROGRAM_SUCCESS, PROGRAM_WARNINGS, PROGRAM_ERRORS
+    PROGRAM_ERRORS
+
 
 def header_block_size(erase_block_size):
     # Determine the size of the FFFF header block
@@ -56,7 +58,8 @@ def header_block_size(erase_block_size):
 
     for size in range(erase_block_size, FFFF_MAX_HEADER_BLOCK_SIZE):
         if size > FFFF_HDR_LENGTH:
-            return size;
+            return size
+
 
 # FFFF representation
 #
@@ -84,6 +87,7 @@ class Ffff:
         self.header_size = FFFF_HDR_LENGTH
         self.flash_image_length = image_length
         self.header_generation_number = header_generation_number
+        self.reserved = [0] * FFFF_RESERVED
         self.elements = []
         self.padding = ""
         self.tail_sentinel = ""
@@ -102,7 +106,8 @@ class Ffff:
 
         # Salt the element table with the end-of-table, because we will be
         # adding sections manually later
-        self.add_element(FFFF_ELEMENT_END_OF_ELEMENT_TABLE, 0, 0, 0, 0, None)
+        self.add_element(FFFF_ELEMENT_END_OF_ELEMENT_TABLE,
+                         0, 0, 0, 0, 0, None)
 
     def header_block_size(self):
         return header_block_size(self.erase_block_size)
@@ -110,7 +115,8 @@ class Ffff:
     def unpack(self):
         """Unpack an FFFF header from a buffer"""
 
-        ffff_hdr = unpack_from("<16s16s48sLLLLL", self.ffff_buf,
+        fmt_string = "<16s16s48sLLLLL" + "L" * FFFF_RESERVED
+        ffff_hdr = unpack_from(fmt_string, self.ffff_buf,
                                self.header_offset)
         self.sentinel = ffff_hdr[0]
         self.timestamp = ffff_hdr[1]
@@ -120,6 +126,8 @@ class Ffff:
         self.header_size = ffff_hdr[5]
         self.flash_image_length = ffff_hdr[6]
         self.header_generation_number = ffff_hdr[7]
+        for i in range(FFFF_RESERVED):
+            self.reserved[i] = ffff_hdr[8+i]
 
         # unpack the tail sentinel
         ffff_hdr = unpack_from("<16s", self.ffff_buf,
@@ -138,7 +146,7 @@ class Ffff:
                                   self.ffff_buf,
                                   self.flash_capacity,
                                   self.erase_block_size,
-                                  0, 0, 0, 0, 0)
+                                  0, 0, 0, 0, 0, 0)
             if not element.unpack(self.ffff_buf, offset):
                 self.elements.append(element)
                 offset += FFFF_ELT_LENGTH
@@ -169,6 +177,11 @@ class Ffff:
                   FFFF_HDR_LENGTH,
                   self.flash_image_length,
                   self.header_generation_number)
+        for i in range(FFFF_RESERVED):
+            pack_into("<L", self.ffff_buf,
+                      self.header_offset + FFFF_HDR_OFF_RESERVED +
+                      (FFFF_RSVD_SIZE * i),
+                      self.reserved[i])
         pack_into("<16s", self.ffff_buf,
                   self.header_offset + FFFF_HDR_OFF_TAIL_SENTINEL,
                   self.tail_sentinel)
@@ -178,8 +191,9 @@ class Ffff:
         for element in self.elements:
             offset = element.pack(self.ffff_buf, offset)
 
-    def add_element(self, element_type, element_id, element_generation,
-                    element_location, element_length, filename):
+    def add_element(self, element_type, element_class, element_id,
+                    element_length, element_location, element_generation,
+                    filename):
         """Add a new element to the element table
 
         Adds an element to the element table but doesn't load the TFTF
@@ -196,10 +210,11 @@ class Ffff:
                                   self.flash_capacity,
                                   self.erase_block_size,
                                   element_type,
+                                  element_class,
                                   element_id,
-                                  element_generation,
-                                  element_location,
                                   element_length,
+                                  element_location,
+                                  element_generation,
                                   filename)
             if element_type == FFFF_ELEMENT_END_OF_ELEMENT_TABLE:
                 if num_elements == 0:
@@ -250,10 +265,10 @@ class Ffff:
             if elt_a.element_location < (2 * self.header_block_size()):
                 self.collisions_found = True
                 collision += [FFFF_HEADER_COLLISION]
-                error("Element at location " + \
-                    format(elt_a.element_location, "#x") + \
-                    " collides with two header blocks of size " + \
-                    format(2 * self.header_block_size(), "#x"))
+                error("Element at location " +
+                      format(elt_a.element_location, "#x") +
+                      " collides with two header blocks of size " +
+                      format(2 * self.header_block_size(), "#x"))
 
             for j, elt_b in enumerate(self.elements):
                 # skip checking one's self
@@ -330,14 +345,21 @@ class Ffff:
             self.header_validity = FFFF_HDR_INVALID
             return self.header_validity
 
+        # Verify that the reserved portion of the header is zeroed.
+        for rsvd in self.reserved:
+            if rsvd != 0:
+                error("Reserved fields are non-zero")
+                self.header_validity = FFFF_HDR_INVALID
+                return self.header_validity
+
         # Verify that the unused portions of the header are zeroed, per spec.
         span_start = self.header_offset + FFFF_HDR_OFF_ELEMENT_TBL + \
             len(self.elements) * FFFF_ELT_LENGTH
         span_end = self.header_offset + FFFF_HDR_OFF_TAIL_SENTINEL - \
             span_start
         if not is_constant_fill(self.ffff_buf[span_start:span_end], 0):
-            error("Unused portions of header are not zeroed: " + str(span_start) + \
-                " to " + str(span_end))
+            error("Unused portions of header are not zeroed: " +
+                  str(span_start) + " to " + str(span_end))
             self.header_validity = FFFF_HDR_INVALID
             return self.header_validity
 
@@ -373,9 +395,12 @@ class Ffff:
                 if self.flash_image_length != 0 and \
                    element.element_location + element.element_length >= \
                    self.flash_image_length:
-                    error("--element-location " + format(element.element_location, "#x") + \
-                        " + --element-length " + format(element.element_length, "#x") + \
-                        " exceeds --image-length " + format(self.flash_image_length, "#x"))
+                    error("--element-location " +
+                          format(element.element_location, "#x") +
+                          " + --element-length " +
+                          format(element.element_length, "#x") +
+                          " exceeds --image-length " +
+                          format(self.flash_image_length, "#x"))
                     sys.exit(PROGRAM_ERRORS)
                 location = next_boundary(element.element_location +
                                          element.element_length,
@@ -439,7 +464,7 @@ class Ffff:
     def display_element_table(self):
         # Display the FFFF header's element table in human-readable form
 
-        print("  Element Table:")
+        print("  Element Table (all values in hex):")
         self.elements[0].display_table_header()
         for index, element in enumerate(self.elements):
             element.display(True)
@@ -492,6 +517,8 @@ class Ffff:
               format(self.flash_image_length))
         print("  Header generation:    0x{0:08x} ({0:d})".
               format(self.header_generation_number))
+        for i, rsvd in enumerate(self.reserved):
+            print("  Reserved [{0:d}]:         0x{1:08x}".format(i, rsvd))
 
         # Dump the element table
         self.display_element_table()
@@ -531,9 +558,14 @@ class Ffff:
         wf.write("{0:s}image_length  {1:08x}\n".
                  format(prefix,
                         base_offset + FFFF_HDR_OFF_FLASH_IMAGE_LENGTH))
-        wf.write("{0:s}generation_num  {1:08x}\n".
+        wf.write("{0:s}generation  {1:08x}\n".
                  format(prefix,
                         base_offset + FFFF_HDR_OFF_HEADER_GENERATION_NUM))
+        for i in range(len(self.reserved)):
+            wf.write("{0:s}reserved[{1:d}]  {2:08x}\n".
+                     format(prefix, i,
+                            base_offset + FFFF_HDR_OFF_RESERVED +
+                            (FFFF_RSVD_SIZE * i)))
 
         # Add the element table
         wf.write("{0:s}element_table  {1:08x}\n".
@@ -543,18 +575,21 @@ class Ffff:
             wf.write("{0:s}element[{1:d}].type  {2:08x}\n".
                      format(prefix, index,
                             element_offset + FFFF_ELT_OFF_TYPE))
+            wf.write("{0:s}element[{1:d}].class  {2:08x}\n".
+                     format(prefix, index,
+                            element_offset + FFFF_ELT_OFF_CLASS))
             wf.write("{0:s}element[{1:d}].id  {2:08x}\n".
                      format(prefix, index,
                             element_offset + FFFF_ELT_OFF_ID))
-            wf.write("{0:s}element[{1:d}].generation_no  {2:08x}\n".
-                     format(prefix, index,
-                            element_offset + FFFF_ELT_OFF_GENERATION))
-            wf.write("{0:s}element[{1:d}].location  {2:08x}\n".
-                     format(prefix, index,
-                            element_offset + FFFF_ELT_OFF_LOCATION))
             wf.write("{0:s}element[{1:d}].length  {2:08x}\n".
                      format(prefix, index,
                             element_offset + FFFF_ELT_OFF_LENGTH))
+            wf.write("{0:s}element[{1:d}].location  {2:08x}\n".
+                     format(prefix, index,
+                            element_offset + FFFF_ELT_OFF_LOCATION))
+            wf.write("{0:s}element[{1:d}].generation  {2:08x}\n".
+                     format(prefix, index,
+                            element_offset + FFFF_ELT_OFF_GENERATION))
             element_offset += FFFF_ELT_LENGTH
 
         # Add the padding and tail sentinel

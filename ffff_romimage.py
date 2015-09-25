@@ -35,8 +35,9 @@ from ffff_element import FFFF_MAX_HEADER_BLOCK_OFFSET, FFFF_SENTINEL, \
     FFFF_MAX_HEADER_BLOCK_SIZE, FFFF_HDR_OFF_TAIL_SENTINEL, \
     FFFF_FILE_EXTENSION, FFFF_HDR_LENGTH, FFFF_HDR_VALID
 from ffff import Ffff
-from util import error, is_power_of_2
+from util import is_power_of_2
 import io
+
 
 # FFFF ROMimage representation
 #
@@ -76,7 +77,8 @@ class FfffRomimage:
         if not is_power_of_2(erase_block_size):
             raise ValueError("Erase block size must be 2**n")
         elif (image_length % erase_block_size) != 0:
-            raise ValueError("Image length must be a multiple of erase bock size")
+            raise ValueError("Image length must be a multiple "
+                             "of erase bock size")
 
         self.flash_image_name = flash_image_name
         self.flash_capacity = flash_capacity
@@ -109,7 +111,6 @@ class FfffRomimage:
         and parses it, returning a success flag. The FFFF ROMimage buffer
         is sized to the supplied file.
         """
-        success = True
         if filename:
             # Try to open the file, and if that fails, try appending the
             # extension.
@@ -216,26 +217,34 @@ class FfffRomimage:
         if not is_power_of_2(self.erase_block_size):
             raise ValueError("Erase block size must be 2**n")
         elif (self.flash_image_length % self.erase_block_size) != 0:
-            raise ValueError("Image length must be a multiple of erase bock size")
+            raise ValueError("Image length must be a multiple "
+                             "of erase bock size")
 
         # Determine the ROM range that can hold the elements
         self.element_location_min = 2 * self.header_block_size()
         self.element_location_max = self.flash_capacity
 
-    def add_element(self, element_type, element_id, element_generation,
-                    element_location, element_length, filename):
+    def add_element(self, element_type, element_class, element_id,
+                    element_length, element_location, element_generation,
+                    filename):
         # Add a new element to the element table but don't load the
         # TFTF file into the ROMimage buffer.  This is called for FFFF
         # creation, and adds the element to both FFFF headers.
         if self.ffff0 and self.ffff1:
             return \
-                self.ffff0.add_element(element_type, element_id,
+                self.ffff0.add_element(element_type,
+                                       element_class,
+                                       element_id,
+                                       element_length,
+                                       element_location,
                                        element_generation,
-                                       element_location, element_length,
                                        filename) and \
-                self.ffff1.add_element(element_type, element_id,
+                self.ffff1.add_element(element_type,
+                                       element_class,
+                                       element_id,
+                                       element_length,
+                                       element_location,
                                        element_generation,
-                                       element_location, element_length,
                                        filename)
         else:
             raise ValueError("No FFFF in which to add element")
@@ -268,7 +277,6 @@ class FfffRomimage:
         Create the FFFF file, write the FFFF ROMimage buffer to it and return
         a success flag.  Appends the default FFFF file extension if omitted
         """
-        
         # Reject the write if we didn't pass the sniff test
         if self.ffff0.header_validity != FFFF_HDR_VALID:
             raise ValueError("Invalid FFFF header 0")
@@ -279,7 +287,6 @@ class FfffRomimage:
         # the user hasn't specified their own extension.
         if rfind(out_filename, ".") == -1:
             out_filename += FFFF_FILE_EXTENSION
-
 
         # Output the entire FFFF blob
         with open(out_filename, 'wb') as wf:

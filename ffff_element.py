@@ -52,37 +52,43 @@ FFFF_ELEMENT_CMS_CERTIFICATE = 0x04
 FFFF_ELEMENT_DATA = 0x05
 FFFF_ELEMENT_END_OF_ELEMENT_TABLE = 0xfe
 
+# FFFF Element classes
+# ***** TBD *****
+
 # FFFF signature block field sizes
 FFFF_SIGNATURE_KEY_NAME_LENGTH = 64
 FFFF_SIGNATURE_KEY_HASH_LENGTH = 32
 
 # FFFF element field lengths
-FFFF_ELT_LEN_TYPE = 4
+FFFF_ELT_LEN_TYPE = 1
+FFFF_ELT_LEN_CLASS = 3
 FFFF_ELT_LEN_ID = 4
-FFFF_ELT_LEN_GENERATION = 4
-FFFF_ELT_LEN_LOCATION = 4
 FFFF_ELT_LEN_LENGTH = 4
+FFFF_ELT_LEN_LOCATION = 4
+FFFF_ELT_LEN_GENERATION = 4
 FFFF_ELT_LENGTH = (FFFF_ELT_LEN_TYPE +
+                   FFFF_ELT_LEN_CLASS +
                    FFFF_ELT_LEN_ID +
-                   FFFF_ELT_LEN_GENERATION +
+                   FFFF_ELT_LEN_LENGTH +
                    FFFF_ELT_LEN_LOCATION +
-                   FFFF_ELT_LEN_LENGTH)
+                   FFFF_ELT_LEN_GENERATION)
 
 # FFFF element field offsets
 FFFF_ELT_OFF_TYPE = 0
-FFFF_ELT_OFF_ID = (FFFF_ELT_OFF_TYPE + FFFF_ELT_LEN_TYPE)
-FFFF_ELT_OFF_GENERATION = (FFFF_ELT_OFF_ID + FFFF_ELT_LEN_ID)
-FFFF_ELT_OFF_LOCATION = (FFFF_ELT_OFF_GENERATION + FFFF_ELT_LEN_GENERATION)
-FFFF_ELT_OFF_LENGTH = (FFFF_ELT_OFF_LOCATION + FFFF_ELT_LEN_LOCATION)
-#FFFF_ELT_LENGTH = 0x14
+FFFF_ELT_OFF_CLASS = (FFFF_ELT_OFF_TYPE + FFFF_ELT_LEN_TYPE)
+FFFF_ELT_OFF_ID = (FFFF_ELT_OFF_CLASS + FFFF_ELT_LEN_CLASS)
+FFFF_ELT_OFF_LENGTH = (FFFF_ELT_OFF_ID + FFFF_ELT_LEN_ID)
+FFFF_ELT_OFF_LOCATION = (FFFF_ELT_OFF_LENGTH + FFFF_ELT_LEN_LENGTH)
+FFFF_ELT_OFF_GENERATION = (FFFF_ELT_OFF_LOCATION + FFFF_ELT_LEN_LOCATION)
 
 # FFFF header & field sizes
 FFFF_SENTINEL_LENGTH = 16
 FFFF_TIMESTAMP_LENGTH = 16
 FFFF_FLASH_IMAGE_NAME_LENGTH = 48
 FFFF_HDR_LENGTH = 512
-#FFFF_MAX_ELEMENTS = 19 #***** REMOVE
-#FFFF_PADDING = 16 #***** REMOVE
+FFFF_RESERVED = 7       # Header words reserved for future use
+FFFF_RSVD_SIZE = 4      # size of each reserved item
+
 
 # FFFF header field lengths
 FFFF_HDR_LEN_SENTINEL = FFFF_SENTINEL_LENGTH
@@ -93,6 +99,7 @@ FFFF_HDR_LEN_ERASE_BLOCK_SIZE = 4
 FFFF_HDR_LEN_HEADER_SIZE = 4
 FFFF_HDR_LEN_FLASH_IMAGE_LENGTH = 4
 FFFF_HDR_LEN_HEADER_GENERATION_NUM = 4
+FFFF_HDR_LEN_RESERVED = (FFFF_RESERVED * FFFF_RSVD_SIZE)
 FFFF_HDR_LEN_TAIL_SENTINEL = FFFF_SENTINEL_LENGTH
 FFFF_HDR_LEN_FIXED_PART = (FFFF_HDR_LEN_SENTINEL +
                            FFFF_HDR_LEN_TIMESTAMP +
@@ -102,6 +109,7 @@ FFFF_HDR_LEN_FIXED_PART = (FFFF_HDR_LEN_SENTINEL +
                            FFFF_HDR_LEN_HEADER_SIZE +
                            FFFF_HDR_LEN_FLASH_IMAGE_LENGTH +
                            FFFF_HDR_LEN_HEADER_GENERATION_NUM +
+                           FFFF_HDR_LEN_RESERVED +
                            FFFF_HDR_LEN_TAIL_SENTINEL)
 FFFF_HDR_NUM_ELEMENTS = ((FFFF_HDR_LENGTH - FFFF_HDR_LEN_FIXED_PART) //
                          FFFF_ELT_LENGTH)
@@ -120,13 +128,15 @@ FFFF_HDR_OFF_FLASH_CAPACITY = (FFFF_HDR_OFF_FLASH_IMAGE_NAME +
 FFFF_HDR_OFF_ERASE_BLOCK_SIZE = (FFFF_HDR_OFF_FLASH_CAPACITY +
                                  FFFF_HDR_LEN_FLASH_CAPACITY)
 FFFF_HDR_OFF_HEADER_SIZE = (FFFF_HDR_OFF_ERASE_BLOCK_SIZE +
-                               FFFF_HDR_LEN_ERASE_BLOCK_SIZE)
+                            FFFF_HDR_LEN_ERASE_BLOCK_SIZE)
 FFFF_HDR_OFF_FLASH_IMAGE_LENGTH = (FFFF_HDR_OFF_HEADER_SIZE +
                                    FFFF_HDR_LEN_HEADER_SIZE)
 FFFF_HDR_OFF_HEADER_GENERATION_NUM = (FFFF_HDR_OFF_FLASH_IMAGE_LENGTH +
                                       FFFF_HDR_LEN_FLASH_IMAGE_LENGTH)
-FFFF_HDR_OFF_ELEMENT_TBL = (FFFF_HDR_OFF_HEADER_GENERATION_NUM +
-                            FFFF_HDR_LEN_HEADER_GENERATION_NUM)
+FFFF_HDR_OFF_RESERVED = (FFFF_HDR_OFF_HEADER_GENERATION_NUM +
+                         FFFF_HDR_LEN_HEADER_GENERATION_NUM)
+FFFF_HDR_OFF_ELEMENT_TBL = (FFFF_HDR_OFF_RESERVED +
+                            FFFF_HDR_LEN_RESERVED)
 FFFF_HDR_OFF_PADDING = (FFFF_HDR_OFF_ELEMENT_TBL +
                         FFFF_HDR_LEN_ELEMENT_TBL)
 FFFF_HDR_OFF_TAIL_SENTINEL = (FFFF_HDR_OFF_PADDING +
@@ -138,6 +148,15 @@ FFFF_FILE_EXTENSION = ".ffff"
 FFFF_HDR_VALID = 0
 FFFF_HDR_ERASED = 1
 FFFF_HDR_INVALID = 2
+
+element_names = {
+    FFFF_ELEMENT_END_OF_ELEMENT_TABLE: "end of elements",
+    FFFF_ELEMENT_STAGE2_FIRMWARE_PACKAGE: "stage 2 firmware",
+    FFFF_ELEMENT_STAGE3_FIRMWARE_PACKAGE: "stage 3 firmware",
+    FFFF_ELEMENT_IMS_CERTIFICATE: "IMS certificate",
+    FFFF_ELEMENT_CMS_CERTIFICATE: "CMS certificate",
+    FFFF_ELEMENT_DATA: "data",
+}
 
 element_short_names = {
     FFFF_ELEMENT_END_OF_ELEMENT_TABLE: "eot",
@@ -159,8 +178,8 @@ class FfffElement:
     """
 
     def __init__(self, index, buf, buf_size, erase_block_size,
-                 element_type, element_id, element_generation,
-                 element_location, element_length, filename=None):
+                 element_type, element_class, element_id, element_length,
+                 element_location, element_generation, filename=None):
         """Constructor
 
         Note: The optional filename is merely stored here.  It is used
@@ -176,16 +195,23 @@ class FfffElement:
         self.erase_block_size = erase_block_size
         self.collisions = []
         self.duplicates = []
-        self.in_range = False
-        self.aligned = False
-        self.valid_type = False
+        if element_type == FFFF_ELEMENT_END_OF_ELEMENT_TABLE:
+            # EOT is always valid
+            self.in_range = True
+            self.aligned = True
+            self.valid_type = True
+        else:
+            self.in_range = False
+            self.aligned = False
+            self.valid_type = False
 
         # Element fields
         self.element_type = element_type
+        self.element_class = element_class
         self.element_id = element_id
-        self.element_generation = element_generation
-        self.element_location = element_location
         self.element_length = element_length
+        self.element_location = element_location
+        self.element_generation = element_generation
 
     def init(self):
         """FFFF Element post-constructor initializer
@@ -217,11 +243,13 @@ class FfffElement:
         end-of-table marker
         """
         element_hdr = unpack_from("<LLLLL", buf, offset)
-        self.element_type = element_hdr[0]
+        type_class = element_hdr[0]
+        self.element_type = type_class & 0x000000ff
+        self.element_class = (type_class >> 8) & 0x00ffffff
         self.element_id = element_hdr[1]
-        self.element_generation = element_hdr[2]
+        self.element_length = element_hdr[2]
         self.element_location = element_hdr[3]
-        self.element_length = element_hdr[4]
+        self.element_generation = element_hdr[4]
 
         # Get the element data into our tftf_blob
         if self.element_type != FFFF_ELEMENT_END_OF_ELEMENT_TABLE:
@@ -235,6 +263,10 @@ class FfffElement:
             self.tftf_blob.load_tftf_from_buffer(buf[span_start:span_end])
             return False
         else:
+            # EOT is always valid
+            self.in_range = True
+            self.aligned = True
+            self.valid_type = True
             return True
 
     def pack(self, buf, offset):
@@ -243,12 +275,13 @@ class FfffElement:
         Packs an element header into into the FFFF header buffer at the
         specified offset and returns the offset for the next element
         """
+        type_class = (self.element_class << 8) | self.element_type
         pack_into("<LLLLL", buf, offset,
-                  self.element_type,
+                  type_class,
                   self.element_id,
-                  self.element_generation,
+                  self.element_length,
                   self.element_location,
-                  self.element_length)
+                  self.element_generation)
         return offset + FFFF_ELT_LENGTH
 
     def validate(self, address_range_low, address_range_high):
@@ -258,22 +291,27 @@ class FfffElement:
 
         # EOT is always valid
         if self.element_type == FFFF_ELEMENT_END_OF_ELEMENT_TABLE:
+            self.in_range = True
+            self.aligned = True
+            self.valid_type = True
             return True
 
         # Do we overlap the header
-        self.in_range = self.element_location >= address_range_low and\
-                        self.element_location < address_range_high
+        self.in_range = self.element_location >= address_range_low and \
+            self.element_location < address_range_high
         if not self.in_range:
-            error("Element location " + format(self.element_location, "#x") + \
-            " falls outside address range " + format(address_range_low, "#x") + \
-            "-" + format(address_range_high, "#x"))
+            error("Element location " + format(self.element_location, "#x") +
+                  " falls outside address range " +
+                  format(address_range_low, "#x") +
+                  "-" + format(address_range_high, "#x"))
 
         # check for alignment and type
         self.aligned = block_aligned(self.element_location,
                                      self.erase_block_size)
         if not self.aligned:
-            error("Element location " + format(self.element_location, "#x") + \
-            " unaligned to block size " + format(self.erase_block_size, "#x"))
+            error("Element location " + format(self.element_location, "#x") +
+                  " unaligned to block size " +
+                  format(self.erase_block_size, "#x"))
         self.valid_type = self.element_type >= \
             FFFF_ELEMENT_STAGE2_FIRMWARE_PACKAGE and \
             self.element_type <= FFFF_ELEMENT_DATA
@@ -303,10 +341,11 @@ class FfffElement:
         """Determine if this TFTF is identical to another"""
 
         return self.element_type == other.element_type and \
+            self.element_class == other.element_class and \
             self.element_id == other.element_id and \
-            self.element_generation == other.element_generation and \
+            self.element_length == other.element_length and \
             self.element_location == other.element_location and \
-            self.element_length == other.element_length
+            self.element_generation == other.element_generation
 
     def write(self, filename):
         """Write an element to a file
@@ -324,31 +363,19 @@ class FfffElement:
 
     def element_name(self, element_type):
         # Convert an element type into textual form
-
-        if element_type == FFFF_ELEMENT_END_OF_ELEMENT_TABLE:
-            name = "end of elements"
-        elif element_type == FFFF_ELEMENT_STAGE2_FIRMWARE_PACKAGE:
-            name = "stage 2 firmware"
-        elif element_type == FFFF_ELEMENT_STAGE3_FIRMWARE_PACKAGE:
-            name = "stage 3 firmware"
-        elif element_type == FFFF_ELEMENT_IMS_CERTIFICATE:
-            name = "IMS certificate"
-        elif element_type == FFFF_ELEMENT_CMS_CERTIFICATE:
-            name = "CMS certificate"
-        elif element_type == FFFF_ELEMENT_DATA:
-            name = "data"
+        if element_type in element_names:
+            return element_names[element_type]
         else:
-            name = "?"
-        return name
+            return "?"
 
     def element_short_name(self, element_type):
-        # Convert an element type into textual form
+        # Convert an element type into a (short) textual form
         if element_type in element_short_names:
             return element_short_names[element_type]
 
     def display_table_header(self):
         # Print the element table column names
-        print("     Type       ID         Generation Location   Length")
+        print("     Type Class  ID       Length   Location Generation")
 
     def display(self, expand_type):
         """Print an element header
@@ -358,11 +385,12 @@ class FfffElement:
         """
         # Print the element data
         element_string = "  {0:2d}".format(self.index)
-        element_string += " 0x{0:08x}".format(self.element_type)
-        element_string += " 0x{0:08x}".format(self.element_id)
-        element_string += " 0x{0:08x}".format(self.element_generation)
-        element_string += " 0x{0:08x}".format(self.element_location)
-        element_string += " 0x{0:08x}".format(self.element_length)
+        element_string += " {0:02x}  ".format(self.element_type)
+        element_string += " {0:06x}".format(self.element_class)
+        element_string += " {0:08x}".format(self.element_id)
+        element_string += " {0:08x}".format(self.element_length)
+        element_string += " {0:08x}".format(self.element_location)
+        element_string += " {0:08x}".format(self.element_generation)
         if expand_type:
             element_string += \
                 " ({0:s})".format(self.element_name(self.element_type))
@@ -397,9 +425,10 @@ class FfffElement:
 
         Print an element header's TFTF info
         """
-        if self.element_type != FFFF_ELEMENT_END_OF_ELEMENT_TABLE: 
+        if self.element_type != FFFF_ELEMENT_END_OF_ELEMENT_TABLE:
             self.tftf_blob.display("element [{0:d}]".format(self.index), "  ")
-            self.tftf_blob.display_data("element [{0:d}]".format(self.index), "  ")
+            self.tftf_blob.display_data("element [{0:d}]".
+                                        format(self.index), "  ")
 
     def write_map_payload(self, wf,  base_offset, prefix=""):
         """Display the field names and offsets of a single FFFF header"""

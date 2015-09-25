@@ -36,18 +36,18 @@ from ffff_element import FFFF_ELEMENT_STAGE2_FIRMWARE_PACKAGE, \
     FFFF_ELEMENT_STAGE3_FIRMWARE_PACKAGE, FFFF_ELEMENT_IMS_CERTIFICATE, \
     FFFF_ELEMENT_CMS_CERTIFICATE, FFFF_ELEMENT_DATA, FFFF_HDR_NUM_ELEMENTS
 from ffff import header_block_size
-from util import error, block_aligned, PROGRAM_SUCCESS, PROGRAM_WARNINGS, \
-    PROGRAM_ERRORS
+from util import error, block_aligned, PROGRAM_ERRORS
 
 # The current element being parsed.
-# Element layout: [type, filename, ID, gen, loc, len].
+# Element layout: [type, filename, class, ID, gen, loc, len].
 current_element = []
 INDEX_CE_TYPE = 0
 INDEX_CE_FILE = 1
-INDEX_CE_EID = 2
-INDEX_CE_EGEN = 3
-INDEX_CE_ELOC = 4
-INDEX_CE_ELEN = 5
+INDEX_CE_ECLASS = 2
+INDEX_CE_EID = 3
+INDEX_CE_EGEN = 4
+INDEX_CE_ELOC = 5
+INDEX_CE_ELEN = 6
 
 # Parameter-checking constants
 # TODO: update these with more plausible values
@@ -88,7 +88,8 @@ class ElementAction(argparse.Action):
         global current_element, elements
         # Handle the element suboptions (valid only if we have an un-flushed
         # element)
-        if option_string in ["--eid", "--egen", "--eloc", "--elen"]:
+        if option_string in ["--eid", "--egen", "--eloc", "--elen",
+                             "--eclass"]:
             if len(current_element) > 0:
                 # Update the appropriate field in current element
                 if option_string == "--eid":
@@ -97,8 +98,10 @@ class ElementAction(argparse.Action):
                     current_element[INDEX_CE_EGEN] = values
                 elif option_string == "--eloc":
                     current_element[INDEX_CE_ELOC] = values
-                else:
+                elif option_string == "--elen":
                     current_element[INDEX_CE_ELEN] = values
+                else:
+                    current_element[INDEX_CE_ECLASS] = values
             else:
                 error("Error: ", option_string, " can only follow an element")
         else:
@@ -110,18 +113,18 @@ class ElementAction(argparse.Action):
             # Handle the specific element type
             if option_string == "--s2f":
                 current_element = [FFFF_ELEMENT_STAGE2_FIRMWARE_PACKAGE,
-                                   values, 0, 0, 0, 0]
+                                   values, 0, 0, 0, 0, 0]
             elif option_string == "--s3f":
                 current_element = [FFFF_ELEMENT_STAGE3_FIRMWARE_PACKAGE,
-                                   values, 0, 0, 0, 0]
+                                   values, 0, 0, 0, 0, 0]
             elif option_string == "--ims":
                 current_element = [FFFF_ELEMENT_IMS_CERTIFICATE, values,
-                                   0, 0, 0, 0]
+                                   0, 0, 0, 0, 0]
             elif option_string == "--cms":
                 current_element = [FFFF_ELEMENT_CMS_CERTIFICATE, values,
-                                   0, 0, 0, 0]
+                                   0, 0, 0, 0, 0]
             elif option_string == "--data":
-                current_element = [FFFF_ELEMENT_DATA, values, 0, 0, 0, 0]
+                current_element = [FFFF_ELEMENT_DATA, values, 0, 0, 0, 0, 0]
             else:
                 error("Unknown option '", option_string, "'")
 
@@ -199,18 +202,19 @@ def validate_args(args, elements):
     for element in elements:
         element_location = element[INDEX_CE_ELOC]
         if not block_aligned(element_location, args.erase_size):
-            error("--element-location is not a multiple of --erase-size value.")
+            error("--element-location is not a multiple of "
+                  "--erase-size value.")
             success = False
 
-        # Does the element location fall within twice the header-block size and the
-        # image length?
-        if not (element_location >= 2 * header_block_size(args.erase_size) and \
+        # Does the element location fall within twice the header-block size
+        # and the image length?
+        if not (element_location >= 2 * header_block_size(args.erase_size) and
                 element_location <= args.image_length):
-            error("--element-location " + format(element_location,"#x") + \
-                        " outside the range of twice the header-block size " + \
-                        format(header_block_size(args.erase_size),"#x") + \
-                        " and the --image-length " + \
-                        format(args.image_length,"#x"))
+            error("--element-location " + format(element_location, "#x") +
+                  " outside the range of twice the header-block size " +
+                  format(header_block_size(args.erase_size), "#x") +
+                  " and the --image-length " +
+                  format(args.image_length, "#x"))
             success = False
 
     # TODO: Other checks TBD
@@ -258,20 +262,21 @@ def main():
                 Generic data file.
         <element_option>
             Modifiers that can be applied to individual options:
-            --eid", "--element-id
+            --eclass, --element-class
                 The element's ID number.
-            --egen", "--element-generation
+            --eid, --element-id
+                The element's ID number.
+            --egen, --element-generation
                 The element's generation number.
-            --eloc", "--element-location
+            --eloc, --element-location
                 The element's absolute location in Flash (must be a multiple
                 of --erase-size).
-            --elen", "--element-length
+            --elen, --element-length
                 (Optional) The element's length. If ommitted, the length is
                 extracted from the file.
     """
     global current_element, elements
     parser = argparse.ArgumentParser()
-    success = True
 
     # args that consume files
     parser.add_argument("--s2f", "--stage-2-fw",
@@ -295,6 +300,11 @@ def main():
                         help="The name of a data file")
 
     # subarguments to the above
+    parser.add_argument("--eclass", "--element-class",
+                        action=ElementAction,
+                        type=auto_int,
+                        help="The class of the preceding element")
+
     parser.add_argument("--eid", "--element-id",
                         action=ElementAction,
                         type=auto_int,
@@ -373,10 +383,11 @@ def main():
     # Add in all of the elements
     for element in elements:
         if not ffff_romimage.add_element(element[INDEX_CE_TYPE],
+                                         element[INDEX_CE_ECLASS],
                                          element[INDEX_CE_EID],
-                                         element[INDEX_CE_EGEN],
-                                         element[INDEX_CE_ELOC],
                                          element[INDEX_CE_ELEN],
+                                         element[INDEX_CE_ELOC],
+                                         element[INDEX_CE_EGEN],
                                          element[INDEX_CE_FILE]):
             error("unable to add", element[INDEX_CE_FILE])
             sys.exit(PROGRAM_ERRORS)
