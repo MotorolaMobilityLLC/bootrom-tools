@@ -34,7 +34,7 @@ import argparse
 import errno
 from tftf import Tftf, TFTF_SECTION_TYPE_RAW_CODE, \
     TFTF_SECTION_TYPE_RAW_DATA, TFTF_SECTION_TYPE_MANIFEST, \
-    TFTF_MAX_SECTIONS
+    TFTF_HDR_NUM_SECTIONS
 from util import error
 import io
 from elftools.elf.elffile import ELFFile
@@ -44,63 +44,57 @@ DEFAULT_ARA_VID = 0
 DEFAULT_ARA_PID = 0
 
 # Flag to indicate that the last arg parsed was a section type, which
-# means that an optional section offset is now legal
-allow_section_offset = False
-allow_section_skip = False
+# means that an optional section parameters are now legal
+allow_section_parameters = False
+
 
 # the list of sections
 sections = []
+
 
 def auto_int(x):
     # Workaround to allow hex numbers to be entered for numeric arguments.
     return int(x, 0)
 
+
 class SectionAction(argparse.Action):
     """argparse custom action for handling elements and subparameters"""
 
     def __call__(self, parser, namespace, values, option_string=None):
-        global allow_section_offset, allow_section_skip, sections
-        if option_string == "--offset":
-            if allow_section_offset:
-                # Append our offset to the current section
-                sections[-1]['offset'] = values
-                allow_section_offset = False
-            else:
+        global allow_section_parameters, sections
+        if option_string in "--load --class --id":
+            if not allow_section_parameters:
                 error(option_string,
                       "can only follow --code, --data or --manifest")
-        elif option_string == "--skip":
-            if allow_section_skip:
-                # Append our skip offset to the current section
-                sections[-1]['skip'] = values
-                allow_section_skip = False
             else:
-                error(option_string,
-                      "can only follow --code, --data or --manifest")
+                if option_string == "--load":
+                    sections[-1]['load'] = values
+                elif option_string == "--class":
+                    sections[-1]['class'] = values
+                elif option_string == "--id":
+                    sections[-1]['id'] = values
         else:
-            # Close the window on section offsets
-            allow_section_offset = False
-            allow_section_skip = False
+            # Close the window on section load addresses
+            allow_section_parameters = False
 
             # Handle the specific file type. In all cases, we stage the
             # section in a temporary holding variable to allow the
-            # optional "--offset" to be added to it.
+            # optional "--load_address" to be added to it.
             if option_string == "--code":
                 sections.append({'type': TFTF_SECTION_TYPE_RAW_CODE,
                                  'file': values})
-                allow_section_offset = True
-                allow_section_skip = True
+                allow_section_parameters = True
             elif option_string == "--data":
                 sections.append({'type': TFTF_SECTION_TYPE_RAW_DATA,
                                  'file': values})
-                allow_section_offset = True
-                allow_section_skip = True
+                allow_section_parameters = True
             elif option_string == "--manifest":
                 sections.append({'type': TFTF_SECTION_TYPE_MANIFEST,
                                  'file': values})
-                allow_section_offset = True
-                allow_section_skip = True
+                allow_section_parameters = True
             else:
                 print("Unknown option '", option_string, "'")
+
 
 class ElfFileAction(argparse.Action):
     """argparse custom action for handling ELF image files"""
@@ -115,12 +109,12 @@ class ElfFileAction(argparse.Action):
                 if code_section:
                     namespace.load = code_section['sh_addr']
                     elf_sections.append({'type': TFTF_SECTION_TYPE_RAW_CODE,
-                                        'addr': code_section['sh_addr'],
+                                        'load': code_section['sh_addr'],
                                         'buffer': code_section.data()})
                 data_section = image.get_section_by_name('.data')
                 if data_section:
                     elf_sections.append({'type': TFTF_SECTION_TYPE_RAW_DATA,
-                                        'addr': data_section['sh_addr'],
+                                        'load': data_section['sh_addr'],
                                         'buffer': data_section.data()})
                 assert(code_section is not None or data_section is not None)
                 sections += elf_sections
@@ -131,17 +125,15 @@ class ElfFileAction(argparse.Action):
         except Exception as e:
             error(e)
 
+
 def validate_args(args, sections):
     # Sanity-check the command line args and return a "valid" flag
     success = True
     if not sections:
         error("You need at least one --code, --data, --manifest or --elf!")
         success = False
-    if len(sections) > TFTF_MAX_SECTIONS:
-        error("Too many sections -", TFTF_MAX_SECTIONS, "max.")
-        success = False
-    if args.load < 0 or args.load > 0xffffffff:
-        error("--load is out of range")
+    if len(sections) > TFTF_HDR_NUM_SECTIONS:
+        error("Too many sections -", TFTF_HDR_NUM_SECTIONS, "max.")
         success = False
     if args.start < 0 or args.start > 0xffffffff:
         error("--start is out of range")
@@ -163,8 +155,8 @@ def validate_args(args, sections):
         success = False
     if not args.out:
         args.out = 'ara:{:08x}:{:08x}:{:08x}:{:08x}:{:02x}.tftf'.format(
-                        args.unipro_mfg, args.unipro_pid, args.ara_vid,
-                        args.ara_pid, args.ara_stage)
+                   args.unipro_mfg, args.unipro_pid, args.ara_vid,
+                   args.ara_pid, args.ara_stage)
     # TODO: Other checks TBD
     return success
 
@@ -178,7 +170,7 @@ def main():
            {--name <string>} {--unipro-mfg} {--unipro-pid} \
            {--ara-vid} {--ara-pid} {--ara-stage} \
            {-v | --verbose} {--map} \
-           [<section_type> <file> {--offset <num>} {--skip <num>}]...
+           [<section_type> <file> {--offset <num>}]...
     Where:
         --load
             The memory location where the package will be loaded.
@@ -209,13 +201,12 @@ def main():
             --manifest    manifest section.
             --Certificate manifest section.
             Sections are nomally loaded contiguously, starting at --load.
-        --offset
-            Set the offset of the start of the section to <num> instead
-            of the first location after the end of the previous section.
-            Offsets are all relative to --load
-        --skip
-            Set the number of bytes at the start of the section to be thrown 
-            away before packing the section.
+        --load
+            Set the address of the start of the section to <num>
+        --class
+            Set the section class to <num>
+        --id
+            Set the section id to <num>
     """
 
     parser = argparse.ArgumentParser()
@@ -239,16 +230,23 @@ def main():
                         help="The name of an input ELF image file")
 
     # Per-section numeric args
-    parser.add_argument("--offset",
+    parser.add_argument("--class",
                         action=SectionAction,
                         type=auto_int,
-                        help="The load offset for the preceding section")
+                        default=0,
+                        help="The class of the preceding TFTF section")
 
-    parser.add_argument("--skip",
+    parser.add_argument("--id",
                         action=SectionAction,
                         type=auto_int,
-                        help="The number of skip bytes for the preceding \
-                              section.")
+                        default=0,
+                        help="The ID of the preceding TFTF section")
+
+    parser.add_argument("--load", "--load_address",
+                        action=SectionAction,
+                        type=auto_int,
+                        default=-1,
+                        help="The load address for the preceding section")
 
     # Flags args
     parser.add_argument("-v", "--verbose",
@@ -259,10 +257,6 @@ def main():
                         action='store_true',
                         help="displays the field offsets")
 
-    #parser.add_argument("--compress",
-    #                    action='store_true',
-    #                    help="Compress code and data sections")
-
     # String/file args
     parser.add_argument("--name",
                         help="The firmware package name")
@@ -271,11 +265,6 @@ def main():
                         help="The TFTF output filename")
 
     # Numeric args
-    parser.add_argument("--load",
-                        type=auto_int,
-                        default=0,
-                        help="The load address for the TFTF")
-
     parser.add_argument("--start",
                         type=auto_int,
                         default=0,
@@ -333,22 +322,20 @@ def main():
     for section in sections:
         if 'file' in section:
             success = tftf_header.add_section_from_file(section['type'],
+                                                        section.get('class',
+                                                                    0),
+                                                        section.get('id', 0),
                                                         section['file'],
-                                                        section.get(\
-                                                            'offset', 0),
-                                                        section.get(\
-                                                            'skip', 0))
+                                                        section.get('load', 0))
             if not success:
                 error("Too many sections")
                 sys.exit(errno.EFBIG)
         elif 'buffer' in section:
-            offset = 0
-            if 'addr' in section:
-                offset = section['addr'] - tftf_header.load_base
             success = tftf_header.add_section(section['type'],
+                                              section.get('class', 0),
+                                              section.get('id', 0),
                                               section['buffer'],
-                                              offset,
-                                              section.get('skip', 0))
+                                              section.get('load', 0))
             if not success:
                 error("Too many sections")
                 sys.exit(errno.EFBIG)

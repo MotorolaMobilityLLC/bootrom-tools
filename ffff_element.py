@@ -87,7 +87,7 @@ FFFF_TIMESTAMP_LENGTH = 16
 FFFF_FLASH_IMAGE_NAME_LENGTH = 48
 FFFF_HDR_LENGTH = 512
 FFFF_RESERVED = 7       # Header words reserved for future use
-FFFF_RSVD_SIZE = 4      # size of each reserved item
+FFFF_RSVD_SIZE = 4      # Size of each reserved item
 
 
 # FFFF header field lengths

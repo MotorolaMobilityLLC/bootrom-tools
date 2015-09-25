@@ -30,7 +30,6 @@
 
 from __future__ import print_function
 import os
-import binascii
 from struct import pack_into, unpack_from
 from string import rfind
 from time import gmtime, strftime
@@ -77,49 +76,54 @@ TFTF_SENTINEL = "TFTF"
 TFTF_TIMESTAMP_LENGTH = 16
 TFTF_FW_PKG_NAME_LENGTH = 48
 TFTF_HDR_LENGTH = 512
+TFTF_RESERVED = 6       # Header words reserved for future use
+TFTF_RSVD_SIZE = 4      # Size of each reserved item
 
 # TFTF section field lengths
+TFTF_SECTION_LEN_TYPE = 1
+TFTF_SECTION_LEN_CLASS = 3
+TFTF_SECTION_LEN_ID = 4
 TFTF_SECTION_LEN_LENGTH = 4
+TFTF_SECTION_LEN_LOAD_ADDRESS = 4
 TFTF_SECTION_LEN_EXPANDED_LENGTH = 4
-TFTF_SECTION_LEN_COPY_OFFSET = 4
-TFTF_SECTION_LEN_SECTION_TYPE = 4
-TFTF_SECTION_LEN = (TFTF_SECTION_LEN_LENGTH +
-                    TFTF_SECTION_LEN_EXPANDED_LENGTH +
-                    TFTF_SECTION_LEN_COPY_OFFSET +
-                    TFTF_SECTION_LEN_SECTION_TYPE)
+TFTF_SECTION_LEN = (TFTF_SECTION_LEN_TYPE +
+                    TFTF_SECTION_LEN_CLASS +
+                    TFTF_SECTION_LEN_ID +
+                    TFTF_SECTION_LEN_LENGTH +
+                    TFTF_SECTION_LEN_LOAD_ADDRESS +
+                    TFTF_SECTION_LEN_EXPANDED_LENGTH)
 
 # TFTF section field offsets
-TFTF_SECTION_OFF_LENGTH = 0
-TFTF_SECTION_OFF_EXPANDED_LENGTH = (TFTF_SECTION_OFF_LENGTH +
-                                    TFTF_SECTION_LEN_LENGTH)
-TFTF_SECTION_OFF_COPY_OFFSET = (TFTF_SECTION_OFF_EXPANDED_LENGTH +
-                                TFTF_SECTION_LEN_EXPANDED_LENGTH)
-TFTF_SECTION_OFF_SECTION_TYPE = (TFTF_SECTION_OFF_COPY_OFFSET +
-                                 TFTF_SECTION_LEN_COPY_OFFSET)
+TFTF_SECTION_OFF_TYPE = 0
+TFTF_SECTION_OFF_CLASS = (TFTF_SECTION_OFF_TYPE + TFTF_SECTION_LEN_TYPE)
+TFTF_SECTION_OFF_ID = (TFTF_SECTION_OFF_CLASS + TFTF_SECTION_LEN_CLASS)
+TFTF_SECTION_OFF_LENGTH = (TFTF_SECTION_OFF_ID + TFTF_SECTION_LEN_ID)
+TFTF_SECTION_OFF_LOAD_ADDRESS = (TFTF_SECTION_OFF_LENGTH +
+                                 TFTF_SECTION_LEN_LENGTH)
+TFTF_SECTION_OFF_EXPANDED_LENGTH = (TFTF_SECTION_OFF_LOAD_ADDRESS +
+                                    TFTF_SECTION_LEN_LOAD_ADDRESS)
 
 # TFTF header field lengths
 TFTF_HDR_LEN_SENTINEL = 4
 TFTF_HDR_LEN_TIMESTAMP = 16
 TFTF_HDR_LEN_NAME = 48
-TFTF_HDR_LEN_LENGTH = 4
-TFTF_HDR_LEN_LOAD_BASE = 4
-TFTF_HDR_LEN_EXPANDED_LENGTH = 4
+TFTF_HDR_LEN_PACKAGE_TYPE = 4
 TFTF_HDR_LEN_START_LOCATION = 4
 TFTF_HDR_LEN_UNIPRO_MFGR_ID = 4
 TFTF_HDR_LEN_UNIPRO_PRODUCT_ID = 4
 TFTF_HDR_LEN_ARA_VENDOR_ID = 4
 TFTF_HDR_LEN_ARA_PRODUCT_ID = 4
+TFTF_HDR_LEN_RESERVED = (TFTF_RESERVED * TFTF_RSVD_SIZE)
 TFTF_HDR_LEN_FIXED_PART = (TFTF_HDR_LEN_SENTINEL +
                            TFTF_HDR_LEN_TIMESTAMP +
                            TFTF_HDR_LEN_NAME +
-                           TFTF_HDR_LEN_LENGTH +
-                           TFTF_HDR_LEN_LOAD_BASE +
-                           TFTF_HDR_LEN_EXPANDED_LENGTH +
+                           TFTF_HDR_LEN_PACKAGE_TYPE +
                            TFTF_HDR_LEN_START_LOCATION +
                            TFTF_HDR_LEN_UNIPRO_MFGR_ID +
                            TFTF_HDR_LEN_UNIPRO_PRODUCT_ID +
                            TFTF_HDR_LEN_ARA_VENDOR_ID +
-                           TFTF_HDR_LEN_ARA_PRODUCT_ID)
+                           TFTF_HDR_LEN_ARA_PRODUCT_ID +
+                           TFTF_HDR_LEN_RESERVED)
 TFTF_HDR_NUM_SECTIONS = ((TFTF_HDR_LENGTH - TFTF_HDR_LEN_FIXED_PART) //
                          TFTF_SECTION_LEN)
 TFTF_HDR_LEN_SECTION_TABLE = (TFTF_HDR_NUM_SECTIONS * TFTF_SECTION_LEN)
@@ -132,14 +136,10 @@ TFTF_HDR_OFF_TIMESTAMP = (TFTF_HDR_OFF_SENTINEL +
                           TFTF_HDR_LEN_SENTINEL)
 TFTF_HDR_OFF_NAME = (TFTF_HDR_OFF_TIMESTAMP +
                      TFTF_HDR_LEN_TIMESTAMP)
-TFTF_HDR_OFF_LENGTH = (TFTF_HDR_OFF_NAME +
-                       TFTF_HDR_LEN_NAME)
-TFTF_HDR_OFF_LOAD_BASE = (TFTF_HDR_OFF_LENGTH +
-                          TFTF_HDR_LEN_LENGTH)
-TFTF_HDR_OFF_EXPANDED_LENGTH = (TFTF_HDR_OFF_LOAD_BASE +
-                                TFTF_HDR_LEN_LOAD_BASE)
-TFTF_HDR_OFF_START_LOCATION = (TFTF_HDR_OFF_EXPANDED_LENGTH +
-                               TFTF_HDR_LEN_EXPANDED_LENGTH)
+TFTF_HDR_OFF_PACKAGE_TYPE = (TFTF_HDR_OFF_NAME +
+                             TFTF_HDR_LEN_NAME)
+TFTF_HDR_OFF_START_LOCATION = (TFTF_HDR_OFF_PACKAGE_TYPE +
+                               TFTF_HDR_LEN_PACKAGE_TYPE)
 TFTF_HDR_OFF_UNIPRO_MFGR_ID = (TFTF_HDR_OFF_START_LOCATION +
                                TFTF_HDR_LEN_START_LOCATION)
 TFTF_HDR_OFF_UNIPRO_PRODUCT_ID = (TFTF_HDR_OFF_UNIPRO_MFGR_ID +
@@ -148,8 +148,10 @@ TFTF_HDR_OFF_ARA_VENDOR_ID = (TFTF_HDR_OFF_UNIPRO_PRODUCT_ID +
                               TFTF_HDR_LEN_UNIPRO_PRODUCT_ID)
 TFTF_HDR_OFF_ARA_PRODUCT_ID = (TFTF_HDR_OFF_ARA_VENDOR_ID +
                                TFTF_HDR_LEN_ARA_VENDOR_ID)
+TFTF_HDR_OFF_RESERVED = (TFTF_HDR_OFF_ARA_PRODUCT_ID +
+                         TFTF_HDR_LEN_ARA_PRODUCT_ID)
 TFTF_HDR_OFF_SECTIONS = (TFTF_HDR_OFF_ARA_PRODUCT_ID +
-                        TFTF_HDR_LEN_ARA_PRODUCT_ID)  # Start of sections array
+                         TFTF_HDR_LEN_ARA_PRODUCT_ID)
 TFTF_HDR_OFF_PADDING = (TFTF_HDR_OFF_SECTIONS + TFTF_HDR_LEN_SECTION_TABLE)
 
 
@@ -167,10 +169,13 @@ TFTF_SIGNATURE_LEN_FIXED_PART = (TFTF_SIGNATURE_LEN_LENGTH +
                                  TFTF_SIGNATURE_LEN_KEY_NAME)
 
 # TFTF signature block field offsets
-TFTF_SIGNATURE_OFF_LENGTH = 0 # 0x00
-TFTF_SIGNATURE_OFF_TYPE = (TFTF_SIGNATURE_OFF_LENGTH + TFTF_SIGNATURE_LEN_LENGTH)  # 0x04
-TFTF_SIGNATURE_OFF_KEY_NAME = (TFTF_SIGNATURE_OFF_TYPE + TFTF_SIGNATURE_LEN_TYPE)  # 0x08
-TFTF_SIGNATURE_OFF_KEY_SIGNATURE = (TFTF_SIGNATURE_OFF_KEY_NAME + TFTF_SIGNATURE_LEN_KEY_NAME)  # 0x68
+TFTF_SIGNATURE_OFF_LENGTH = 0
+TFTF_SIGNATURE_OFF_TYPE = (TFTF_SIGNATURE_OFF_LENGTH +
+                           TFTF_SIGNATURE_LEN_LENGTH)
+TFTF_SIGNATURE_OFF_KEY_NAME = (TFTF_SIGNATURE_OFF_TYPE +
+                               TFTF_SIGNATURE_LEN_TYPE)
+TFTF_SIGNATURE_OFF_KEY_SIGNATURE = (TFTF_SIGNATURE_OFF_KEY_NAME +
+                                    TFTF_SIGNATURE_LEN_KEY_NAME)
 
 # TFTF Signature Types and associated dictionary of types and names
 # NOTE: When adding new types, both the "define" and the dictionary
@@ -190,7 +195,7 @@ TFTF_VALID_WITH_COLLISIONS = 2
 # Size of the blob to copy each time
 copy_blob_size = 1024*1024*10
 
-section_names = {
+section_type_names = {
     TFTF_SECTION_TYPE_RESERVED: "Reserved",
     TFTF_SECTION_TYPE_RAW_CODE: "Code",
     TFTF_SECTION_TYPE_RAW_DATA: "Data",
@@ -202,7 +207,7 @@ section_names = {
     TFTF_SECTION_TYPE_END_OF_DESCRIPTORS: "End of descriptors",
 }
 
-section_short_names = {
+section_type_short_names = {
     TFTF_SECTION_TYPE_RESERVED: "reserved",
     TFTF_SECTION_TYPE_RAW_CODE: "code",
     TFTF_SECTION_TYPE_RAW_DATA: "data",
@@ -217,17 +222,20 @@ section_short_names = {
 
 class TftfSection:
     """TFTF Section representation"""
-    def __init__(self, section_type, section_length=0,
-                 extended_length=0, copy_offset=0, filename=None):
+    def __init__(self, section_type, section_class=0, section_id=0,
+                 section_length=0, load_address=0, extended_length=0,
+                 filename=None):
         """Constructor
 
         If filename is specified, this reads in the file and sets the section
         length to the length of the file.
         """
-        self.section_length = section_length
-        self.expanded_length = extended_length
-        self.copy_offset = copy_offset
         self.section_type = section_type
+        self.section_class = section_class
+        self.section_id = section_id
+        self.section_length = section_length
+        self.load_address = load_address
+        self.expanded_length = extended_length
         self.filename = filename
 
         # Try to size the section length from the section input file
@@ -247,53 +255,56 @@ class TftfSection:
         # Unpack a section header from a TFTF header buffer, and return
         # a flag indicating if the section was a section-end
 
-        section_hdr = unpack_from("<LLLL", section_buf, section_offset)
-        self.section_length = section_hdr[0]
-        self.expanded_length = section_hdr[1]
-        self.copy_offset = section_hdr[2]
-        self.section_type = section_hdr[3]
+        section_hdr = unpack_from("<LLLLL", section_buf, section_offset)
+        type_class = section_hdr[0]
+        self.section_type = type_class & 0x000000ff
+        self.section_class = (type_class >> 8) & 0x00ffffff
+        self.section_id = section_hdr[1]
+        self.section_length = section_hdr[2]
+        self.load_address = section_hdr[3]
+        self.expanded_length = section_hdr[4]
         return self.section_type in valid_tftf_types
 
     def pack(self, buf, offset):
         # Pack a section header into a TFTF header buffer at the specified
         # offset, returning the offset of the next section.
-
-        pack_into("<LLLL", buf, offset,
+        type_class = (self.section_class << 8) | self.section_type
+        pack_into("<LLLLL", buf, offset,
+                  type_class,
+                  self.section_id,
                   self.section_length,
-                  self.expanded_length,
-                  self.copy_offset,
-                  self.section_type)
+                  self.load_address,
+                  self.expanded_length)
         return offset + TFTF_SECTION_LEN
 
-    def update(self, copy_offset):
-        # Update a section header at the specifed offset, and return an
-        # offset to the start of the next section
-        #
-        # Use this to sweep through the list of sections and update the
-        # section copy_offsets to concatenate sections (except where the
-        # user has specified an offset).
-
-        if self.section_type in countable_tftf_types:
-            if self.copy_offset == 0:
-                self.copy_offset = copy_offset
-        else:
-            self.copy_offset = 0
-
-        return self.copy_offset + self.expanded_length
+#    def update(self, copy_offset):
+#        # Update a section header at the specifed offset, and return an
+#        # offset to the start of the next section
+#        #
+#        # Use this to sweep through the list of sections and update the
+#        # section copy_offsets to concatenate sections (except where the
+#        # user has specified an offset).
+#
+#        if self.section_type in countable_tftf_types:
+#            if self.copy_offset == 0:
+#                self.copy_offset = copy_offset
+#        else:
+#            self.copy_offset = 0
+#
+#        return self.copy_offset + self.expanded_length
 
     def section_name(self, section_type):
         # Convert a section type into textual form
 
-        if section_type in section_names:
-            return section_names[section_type]
+        if section_type in section_type_names:
+            return section_type_names[section_type]
         else:
             return "?"
 
     def section_short_name(self, section_type):
-        # Convert a section type into textual form
-
-        if section_type in section_short_names:
-            return section_short_names[section_type]
+        # Convert a section type into a short textual form
+        if section_type in section_type_short_names:
+            return section_type_short_names[section_type]
         else:
             return "?"
 
@@ -301,15 +312,19 @@ class TftfSection:
         # Print the section table column names, returning the column
         # header for the section table (no indentation)
 
-        print("{0:s}     Length     Exp. Len   Offset     Type".format(indent))
+        print("{0:s}     Type Class  ID       Length   Load     Exp.Len".
+              format(indent))
 
     def display(self, indent, index, expand_type):
         # Print a section header
-
-        section_string = "{0:s}  {1:2d} ".format(indent, index)
-        section_string += "0x{0:08x} 0x{1:08x} 0x{2:08x} 0x{3:08x}".format(
-                          self.section_length, self.expanded_length,
-                          self.copy_offset, self.section_type)
+        section_string = "{0:s}  {1:2d} {2:02x}   {3:06x} {4:08x} " \
+                         "{5:08x} {6:08x} {7:08x}".format(indent, index,
+                                                          self.section_type,
+                                                          self.section_class,
+                                                          self.section_id,
+                                                          self.section_length,
+                                                          self.load_address,
+                                                          self.expanded_length)
 
         if expand_type:
             section_string += " ({0:s})".format(
@@ -335,9 +350,9 @@ class TftfSection:
             sig_type = tftf_signature_names[sig_block[1]]
             if not sig_type:
                 sig_type = "UNKNOWN"
-            print("Sig type:", sig_type) #*****
             print("{0:s}  Length:    {1:08x}".format(indent, sig_block[0]))
-            print("{0:s}  Sig. type: {1:d} ({2:s})".format(indent, sig_block[1], sig_type))
+            print("{0:s}  Sig. type: {1:d} ({2:s})".
+                  format(indent, sig_block[1], sig_type))
             print("{0:s}  Key name:".format(indent))
             print("{0:s}      '{1:4s}'".format(indent, sig_block[2]))
             print("{0:s}  Signature:".format(indent))
@@ -363,14 +378,13 @@ class Tftf:
         self.sentinel = 0
         self.timestamp = ""
         self.firmware_package_name = ""
-        self.load_length = 0
-        self.load_base = 0
-        self.expanded_length = 0
+        self.package_type = 0
         self.start_location = 0
         self.unipro_mfg_id = 0
         self.unipro_pid = 0
         self.ara_vid = 0
         self.ara_pid = 0
+        self.reserved = [0] * TFTF_RESERVED
         self.sections = []
 
         if filename:
@@ -380,8 +394,7 @@ class Tftf:
         else:
             # Salt the list with the end-of-table, because we will be
             # adding sections manually later
-            eot = TftfSection(TFTF_SECTION_TYPE_END_OF_DESCRIPTORS,
-                              0, 0, 0, None)
+            eot = TftfSection(TFTF_SECTION_TYPE_END_OF_DESCRIPTORS)
             self.sections.append(eot)
 
     def load_tftf_file(self, filename):
@@ -430,18 +443,19 @@ class Tftf:
 
     def unpack(self):
         # Unpack a TFTF header from a buffer
-        tftf_hdr = unpack_from("<4s16s48sLLLLLLLL", self.tftf_buf)
+        fmt_string = "<4s16s48sLLLLLL" + "L" * TFTF_RESERVED
+        tftf_hdr = unpack_from(fmt_string, self.tftf_buf)
         self.sentinel = tftf_hdr[0]
         self.timestamp = tftf_hdr[1]
         self.firmware_package_name = tftf_hdr[2]
-        self.load_length = tftf_hdr[3]
-        self.load_base = tftf_hdr[4]
-        self.expanded_length = tftf_hdr[5]
-        self.start_location = tftf_hdr[6]
-        self.unipro_mfg_id = tftf_hdr[7]
-        self.unipro_pid = tftf_hdr[8]
-        self.ara_vid = tftf_hdr[9]
-        self.ara_pid = tftf_hdr[10]
+        self.package_type = tftf_hdr[3]
+        self.start_location = tftf_hdr[4]
+        self.unipro_mfg_id = tftf_hdr[5]
+        self.unipro_pid = tftf_hdr[6]
+        self.ara_vid = tftf_hdr[7]
+        self.ara_pid = tftf_hdr[8]
+        for i in range(TFTF_RESERVED):
+            self.reserved[i] = tftf_hdr[9+i]
 
         # Purge (the EOT from) the list because we're populating the entire
         # list from the file
@@ -450,7 +464,7 @@ class Tftf:
         # Parse the table of section headers
         section_offset = TFTF_HDR_OFF_SECTIONS
         for section_index in range(TFTF_HDR_NUM_SECTIONS):
-            section = TftfSection(0, 0, 0, 0, None)
+            section = TftfSection(0)
             if section.unpack(self.tftf_buf, section_offset):
                 self.sections.append(section)
                 section_offset += TFTF_SECTION_LEN
@@ -478,27 +492,29 @@ class Tftf:
         if self.firmware_package_name:
             pack_into("<48s", self.tftf_buf, TFTF_HDR_OFF_NAME,
                       self.firmware_package_name)
-        pack_into("<LLLLLLLL", self.tftf_buf, TFTF_HDR_OFF_LENGTH,
-                  self.load_length,
-                  self.load_base,
-                  self.expanded_length,
+        pack_into("<LLLLLL", self.tftf_buf, TFTF_HDR_OFF_PACKAGE_TYPE,
+                  self.package_type,
                   self.start_location,
                   self.unipro_mfg_id,
                   self.unipro_pid,
                   self.ara_vid,
                   self.ara_pid)
+        for i in range(TFTF_RESERVED):
+            pack_into("<L", self.tftf_buf,
+                      TFTF_HDR_OFF_RESERVED + (TFTF_RSVD_SIZE * i),
+                      self.reserved[i])
 
         # Pack the section headers into the TFTF header buffer
         offset = TFTF_HDR_OFF_SECTIONS
         for section in self.sections:
             offset = section.pack(self.tftf_buf, offset)
 
-    def add_section(self, section_type, section_data, copy_offset=0, skip=0):
+    def add_section(self, section_type, section_class, section_id,
+                    section_data, load_address=0):
         # Add a new section to the section table and return a success flag
         #
         # (This would be called by "sign-tftf" to add signature and
         # certificate blocks.)
-
         num_sections = len(self.sections)
         if num_sections < TFTF_HDR_NUM_SECTIONS:
             # Insert the section to the section list, just in front of
@@ -510,12 +526,15 @@ class Tftf:
             #      the write stage or someone explicitly calls "pack".)
             self.sections.insert(num_sections - 1,
                                  TftfSection(section_type,
-                                             len(section_data) - skip,
-                                             len(section_data) - skip,
-                                             copy_offset, None))
+                                             section_class,
+                                             section_id,
+                                             len(section_data),
+                                             load_address,
+                                             len(section_data),
+                                             None))
 
             # Append the section data blob to our TFTF buffer
-            self.tftf_buf += section_data[skip:]
+            self.tftf_buf += section_data
 
             # Record the length of the entire TFTF blob (this will be longer
             # than the header's load_length)
@@ -525,53 +544,26 @@ class Tftf:
             error("Section table full")
             return False
 
-    def add_section_from_file(self, section_type, filename, copy_offset=0, \
-                              skip=0):
+    def add_section_from_file(self, section_type, section_class, section_id,
+                              filename, load_address=0):
         # Add a new section from a file and return a success flag
         #
         # (This would be called by "create-tftf" while/after parsing section
         # parameters)
-
         if len(self.sections) < TFTF_HDR_NUM_SECTIONS:
             try:
                 with open(filename, 'rb') as readfile:
                     section_data = readfile.read()
 
-                return self.add_section(section_type, section_data,
-                                        copy_offset, skip)
+                return self.add_section(section_type, section_class,
+                                        section_id, section_data,
+                                        load_address)
             except:
                 error("Unable to read", filename)
                 return False
         else:
             error("Section table full")
             return False
-
-    def update_section_table_offsets(self):
-        # Update the copy_offsets in the section table and the load_length
-        #
-        # (This would be called by "create-tftf" after parsing all of the
-        # parameters)
-
-        self.load_length = 0
-        self.expanded_length = 0
-        copy_offset = 0
-        for section in self.sections:
-            # Fill in any omitted section copy_offsets
-            section_start = max(copy_offset, section.copy_offset)
-            copy_offset = section.update(copy_offset)
-
-            # Only count the sections that are (or could be) signed
-            if section.section_type == TFTF_SECTION_TYPE_SIGNATURE or \
-               section.section_type == TFTF_SECTION_TYPE_END_OF_DESCRIPTORS:
-                break
-
-            # The load_length and expanded_length are calculated as being
-            # the maximum extent of the various sections
-            if section.section_type in countable_tftf_types:
-                section_end = section_start + section.section_length
-                expanded_end = section_start + section.expanded_length
-                self.load_length = max(self.load_length, section_end)
-                self.expanded_length = max(self.expanded_length, expanded_end)
 
     def check_for_collisions(self):
         # Scan the TFTF section table for collisions
@@ -586,7 +578,7 @@ class Tftf:
                section_a.section_type == TFTF_SECTION_TYPE_END_OF_DESCRIPTORS:
                 break
 
-            start_a = section_a.copy_offset
+            start_a = section_a.load_address
             end_a = start_a + section_a.expanded_length - 1
             for comp_b, section_b in enumerate(self.sections):
                 # skip checking one's self
@@ -598,7 +590,7 @@ class Tftf:
                        TFTF_SECTION_TYPE_END_OF_DESCRIPTORS:
                         break
 
-                    start_b = section_b.copy_offset
+                    start_b = section_b.load_address
                     end_b = start_b + section_b.expanded_length - 1
                     if end_b >= start_a and \
                        start_b <= end_a:
@@ -636,9 +628,8 @@ class Tftf:
         """
         self.sentinel == TFTF_SENTINEL
 
-        # Update the section table copy_offsets and check for collisions
+        # Check for collisions
         self.sentinel = TFTF_SENTINEL
-        self.update_section_table_offsets()
         self.check_for_collisions()
         if self.timestamp == "":
             self.timestamp = strftime("%Y%m%d %H%M%S", gmtime())
@@ -708,12 +699,8 @@ class Tftf:
             indent, self.timestamp))
         print("{0:s}  Fw. pkg name:     '{1:48s}'".format(
             indent, self.firmware_package_name))
-        print("{0:s}  Load length:       0x{1:08x}".format(
-            indent, self.load_length))
-        print("{0:s}  Load base:         0x{1:08x}".format(
-            indent, self.load_base))
-        print("{0:s}  Expanded length:   0x{1:08x}".format(
-            indent, self.expanded_length))
+        print("{0:s}  Package type:      0x{1:08x}".format(
+            indent, self.package_type))
         print("{0:s}  Start location:    0x{1:08x}".format(
             indent, self.start_location))
         print("{0:s}  Unipro mfg ID:     0x{1:08x}".format(
@@ -724,9 +711,11 @@ class Tftf:
             indent, self.ara_vid))
         print("{0:s}  Ara product ID:    0x{1:08x}".format(
             indent, self.ara_pid))
+        for i, rsvd in enumerate(self.reserved):
+            print("  Reserved [{0:d}]:      0x{1:08x}".format(i, rsvd))
 
         # 2. Dump the table of section headers
-        print("{0:s}  Section Table:".format(indent))
+        print("{0:s}  Section Table (all values in hex):".format(indent))
         self.sections[0].display_table_header(indent)
         for index, section in enumerate(self.sections):
             section.display(indent, index, True)
@@ -748,7 +737,8 @@ class Tftf:
         if num_unused_sections > 2:
             print("{0:s}   :    :".format(indent))
         if num_unused_sections > 0:
-            print("{0:s}  {1:2d} (unused)".format(indent, TFTF_HDR_NUM_SECTIONS-1))
+            print("{0:s}  {1:2d} (unused)".
+                  format(indent, TFTF_HDR_NUM_SECTIONS-1))
         print(" ")
 
     def display_data(self, title=None, indent=""):
@@ -857,12 +847,8 @@ class Tftf:
                  format(prefix, base_offset + TFTF_HDR_OFF_TIMESTAMP))
         wf.write("{0:s}firmware_name  {1:08x}\n".
                  format(prefix, base_offset + TFTF_HDR_OFF_NAME))
-        wf.write("{0:s}load_length  {1:08x}\n".
-                 format(prefix, base_offset + TFTF_HDR_OFF_LENGTH))
-        wf.write("{0:s}load_base  {1:08x}\n".
-                 format(prefix, base_offset + TFTF_HDR_OFF_LOAD_BASE))
-        wf.write("{0:s}expanded_length  {1:08x}\n".
-                 format(prefix, base_offset + TFTF_HDR_OFF_EXPANDED_LENGTH))
+        wf.write("{0:s}package_type  {1:08x}\n".
+                 format(prefix, base_offset + TFTF_HDR_OFF_PACKAGE_TYPE))
         wf.write("{0:s}start_location  {1:08x}\n".
                  format(prefix, base_offset + TFTF_HDR_OFF_START_LOCATION))
         wf.write("{0:s}unipro_mfgr_id  {1:08x}\n".
@@ -873,22 +859,33 @@ class Tftf:
                  format(prefix, base_offset + TFTF_HDR_OFF_ARA_VENDOR_ID))
         wf.write("{0:s}ara_product_id  {1:08x}\n".
                  format(prefix, base_offset + TFTF_HDR_OFF_ARA_PRODUCT_ID))
+        for i in range(len(self.reserved)):
+            wf.write("{0:s}reserved[{1:d}]  {2:08x}\n".
+                     format(prefix, i,
+                            base_offset + TFTF_HDR_OFF_RESERVED +
+                            (TFTF_RSVD_SIZE * i)))
 
         # Dump the section descriptors (used and free)
         section_offset = base_offset + TFTF_HDR_OFF_SECTIONS
         for index in range(TFTF_HDR_NUM_SECTIONS):
+            wf.write("{0:s}section[{1:d}].type  {2:08x}\n".
+                     format(prefix, index,
+                            section_offset + TFTF_SECTION_OFF_TYPE))
+            wf.write("{0:s}section[{1:d}].class  {2:08x}\n".
+                     format(prefix, index,
+                            section_offset + TFTF_SECTION_OFF_CLASS))
+            wf.write("{0:s}section[{1:d}].id  {2:08x}\n".
+                     format(prefix, index,
+                            section_offset + TFTF_SECTION_OFF_ID))
             wf.write("{0:s}section[{1:d}].section_length  {2:08x}\n".
                      format(prefix, index,
                             section_offset + TFTF_SECTION_OFF_LENGTH))
+            wf.write("{0:s}section[{1:d}].load_address  {2:08x}\n".
+                     format(prefix, index,
+                            section_offset + TFTF_SECTION_OFF_LOAD_ADDRESS))
             wf.write("{0:s}section[{1:d}].expanded_length  {2:08x}\n".
                      format(prefix, index,
                             section_offset + TFTF_SECTION_OFF_EXPANDED_LENGTH))
-            wf.write("{0:s}section[{1:d}].copy_offset  {2:08x}\n".
-                     format(prefix, index,
-                            section_offset + TFTF_SECTION_OFF_COPY_OFFSET))
-            wf.write("{0:s}section[{1:d}].type  {2:08x}\n".
-                     format(prefix, index,
-                            section_offset + TFTF_SECTION_OFF_SECTION_TYPE))
             section_offset += TFTF_SECTION_LEN
 
         # Dump the padding (the remainder of the TFTF header
