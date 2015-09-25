@@ -34,7 +34,7 @@ import argparse
 from ffff_romimage import FfffRomimage
 from ffff_element import FFFF_ELEMENT_STAGE2_FIRMWARE_PACKAGE, \
     FFFF_ELEMENT_STAGE3_FIRMWARE_PACKAGE, FFFF_ELEMENT_IMS_CERTIFICATE, \
-    FFFF_ELEMENT_CMS_CERTIFICATE, FFFF_ELEMENT_DATA, FFFF_MAX_ELEMENTS
+    FFFF_ELEMENT_CMS_CERTIFICATE, FFFF_ELEMENT_DATA, FFFF_HDR_NUM_ELEMENTS
 from ffff import header_block_size
 from util import error, block_aligned, PROGRAM_SUCCESS, PROGRAM_WARNINGS, \
     PROGRAM_ERRORS
@@ -161,8 +161,8 @@ def validate_args(args, elements):
         error("You need at least one element!")
         success = False
 
-    if len(elements) > FFFF_MAX_ELEMENTS:
-        error("Too many elements -", FFFF_MAX_ELEMENTS, "max.")
+    if len(elements) > FFFF_HDR_NUM_ELEMENTS:
+        error("Too many elements -", FFFF_HDR_NUM_ELEMENTS, "max.")
         success = False
 
     success = validate_block_arg(success,

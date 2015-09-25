@@ -38,7 +38,7 @@ from struct import pack_into
 from tftf import Tftf, error, TFTF_SECTION_TYPE_SIGNATURE
 import M2Crypto
 from signature_block import SignatureBlock, get_key_type, \
-    TFTF_SIGNATURE_BLOCK_SIZE, TFTF_SIGNATURE_TYPE_RSA_2048_SHA_256, \
+    TFTF_SIGNATURE_LEN_FIXED_PART, TFTF_SIGNATURE_TYPE_RSA_2048_SHA_256, \
     TFTF_SIGNATURE_OFF_TYPE, TFTF_SIGNATURE_OFF_KEY_NAME
 
 
@@ -182,7 +182,7 @@ def main():
     # as much initialized as possible.  We'll use this as the base image
     # for each of the specified TFTF files, where we'll append the signature
     # proper, set the length and append the section to the TFTF file.
-    base_signature_block = bytearray(TFTF_SIGNATURE_BLOCK_SIZE)
+    base_signature_block = bytearray(TFTF_SIGNATURE_LEN_FIXED_PART)
 
     signature_type = TFTF_SIGNATURE_TYPE_RSA_2048_SHA_256
 

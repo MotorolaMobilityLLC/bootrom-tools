@@ -39,7 +39,7 @@ TFTF_SIGNATURE_OFF_TYPE = 0x04
 TFTF_SIGNATURE_OFF_KEY_NAME = 0x08
 TFTF_SIGNATURE_OFF_KEY_SIGNATURE = 0x68
 # Size of the fixed portion of the signature block
-TFTF_SIGNATURE_BLOCK_SIZE = TFTF_SIGNATURE_OFF_KEY_SIGNATURE
+TFTF_SIGNATURE_LEN_FIXED_PART = TFTF_SIGNATURE_OFF_KEY_SIGNATURE
 
 # TFTF Signature Types and associated dictionary of types and names
 # NOTE: When adding new types, both the "define" and the dictionary
@@ -96,13 +96,13 @@ class SignatureBlock:
             self.signature_type = signature_type
             self.key_name = key_name
             self.signature = signature
-            self.length = TFTF_SIGNATURE_BLOCK_SIZE + len(signature)
+            self.length = TFTF_SIGNATURE_LEN_FIXED_PART + len(signature)
         else:
             error("Invalid SignatureBlock creation")
             self.signature_type = TFTF_SIGNATURE_TYPE_UNKNOWN
             self.key_name = None
             self.signature = None
-            self.length = TFTF_SIGNATURE_BLOCK_SIZE
+            self.length = TFTF_SIGNATURE_LEN_FIXED_PART
 
     def pack(self):
         """Pack the signature data into a binary blob
@@ -115,7 +115,7 @@ class SignatureBlock:
                   self.length,
                   self.signature_type,
                   self.key_name)
-        buf[TFTF_SIGNATURE_BLOCK_SIZE:self.length] = self.signature
+        buf[TFTF_SIGNATURE_LEN_FIXED_PART:self.length] = self.signature
         return buf
 
     def unpack(self, buf):
@@ -126,7 +126,7 @@ class SignatureBlock:
         self.signature_type = sig_block[1]
         self.key_name = sig_block[2]
         self.signature = \
-            buf[TFTF_SIGNATURE_BLOCK_SIZE:self.length]
+            buf[TFTF_SIGNATURE_LEN_FIXED_PART:self.length]
 
     def display(self, indent=""):
         """Display the signature block"""

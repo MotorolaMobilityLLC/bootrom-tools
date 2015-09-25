@@ -77,42 +77,100 @@ TFTF_SENTINEL = "TFTF"
 TFTF_TIMESTAMP_LENGTH = 16
 TFTF_FW_PKG_NAME_LENGTH = 48
 TFTF_HDR_LENGTH = 512
-TFTF_SECTION_HDR_LENGTH = 16
-TFTF_PADDING = 12
-TFTF_MAX_SECTIONS = 25
 
-# Offsets into the TFTF header
-TFTF_HDR_OFF_SENTINEL = 0x00
-TFTF_HDR_OFF_TIMESTAMP = 0x04
-TFTF_HDR_OFF_NAME = 0x14
-TFTF_HDR_OFF_LENGTH = 0x44
-TFTF_HDR_OFF_LOAD_BASE = 0x48
-TFTF_HDR_OFF_EXPANDED_LENGTH = 0x4c
-TFTF_HDR_OFF_START_LOCATION = 0x50
-TFTF_HDR_OFF_UNIPRO_MFGR_ID = 0x54
-TFTF_HDR_OFF_UNIPRO_PRODUCT_ID = 0x58
-TFTF_HDR_OFF_ARA_VENDOR_ID = 0x5c
-TFTF_HDR_OFF_ARA_PRODUCT_ID = 0x60
-TFTF_HDR_OFF_SECTIONS = 0x64  # Start of sections array
-TFTF_HDR_OFF_PADDING = (TFTF_HDR_LENGTH - TFTF_PADDING)
+# TFTF section field lengths
+TFTF_SECTION_LEN_LENGTH = 4
+TFTF_SECTION_LEN_EXPANDED_LENGTH = 4
+TFTF_SECTION_LEN_COPY_OFFSET = 4
+TFTF_SECTION_LEN_SECTION_TYPE = 4
+TFTF_SECTION_LEN = (TFTF_SECTION_LEN_LENGTH +
+                    TFTF_SECTION_LEN_EXPANDED_LENGTH +
+                    TFTF_SECTION_LEN_COPY_OFFSET +
+                    TFTF_SECTION_LEN_SECTION_TYPE)
 
-# Offsets within a TFTF section descriptor
-TFTF_SECTION_OFF_LENGTH = 0x00
-TFTF_SECTION_OFF_EXPANDED_LENGTH = 0x04
-TFTF_SECTION_OFF_COPY_OFFSET = 0x08
-TFTF_SECTION_OFF_SECTION_TYPE = 0x0c
+# TFTF section field offsets
+TFTF_SECTION_OFF_LENGTH = 0
+TFTF_SECTION_OFF_EXPANDED_LENGTH = (TFTF_SECTION_OFF_LENGTH +
+                                    TFTF_SECTION_LEN_LENGTH)
+TFTF_SECTION_OFF_COPY_OFFSET = (TFTF_SECTION_OFF_EXPANDED_LENGTH +
+                                TFTF_SECTION_LEN_EXPANDED_LENGTH)
+TFTF_SECTION_OFF_SECTION_TYPE = (TFTF_SECTION_OFF_COPY_OFFSET +
+                                 TFTF_SECTION_LEN_COPY_OFFSET)
+
+# TFTF header field lengths
+TFTF_HDR_LEN_SENTINEL = 4
+TFTF_HDR_LEN_TIMESTAMP = 16
+TFTF_HDR_LEN_NAME = 48
+TFTF_HDR_LEN_LENGTH = 4
+TFTF_HDR_LEN_LOAD_BASE = 4
+TFTF_HDR_LEN_EXPANDED_LENGTH = 4
+TFTF_HDR_LEN_START_LOCATION = 4
+TFTF_HDR_LEN_UNIPRO_MFGR_ID = 4
+TFTF_HDR_LEN_UNIPRO_PRODUCT_ID = 4
+TFTF_HDR_LEN_ARA_VENDOR_ID = 4
+TFTF_HDR_LEN_ARA_PRODUCT_ID = 4
+TFTF_HDR_LEN_FIXED_PART = (TFTF_HDR_LEN_SENTINEL +
+                           TFTF_HDR_LEN_TIMESTAMP +
+                           TFTF_HDR_LEN_NAME +
+                           TFTF_HDR_LEN_LENGTH +
+                           TFTF_HDR_LEN_LOAD_BASE +
+                           TFTF_HDR_LEN_EXPANDED_LENGTH +
+                           TFTF_HDR_LEN_START_LOCATION +
+                           TFTF_HDR_LEN_UNIPRO_MFGR_ID +
+                           TFTF_HDR_LEN_UNIPRO_PRODUCT_ID +
+                           TFTF_HDR_LEN_ARA_VENDOR_ID +
+                           TFTF_HDR_LEN_ARA_PRODUCT_ID)
+TFTF_HDR_NUM_SECTIONS = ((TFTF_HDR_LENGTH - TFTF_HDR_LEN_FIXED_PART) //
+                         TFTF_SECTION_LEN)
+TFTF_HDR_LEN_SECTION_TABLE = (TFTF_HDR_NUM_SECTIONS * TFTF_SECTION_LEN)
+TFTF_HDR_LEN_PADDING = (TFTF_HDR_LENGTH -
+                        (TFTF_HDR_LEN_FIXED_PART + TFTF_HDR_LEN_SECTION_TABLE))
+
+# TFTF header field offsets
+TFTF_HDR_OFF_SENTINEL = 0
+TFTF_HDR_OFF_TIMESTAMP = (TFTF_HDR_OFF_SENTINEL +
+                          TFTF_HDR_LEN_SENTINEL)
+TFTF_HDR_OFF_NAME = (TFTF_HDR_OFF_TIMESTAMP +
+                     TFTF_HDR_LEN_TIMESTAMP)
+TFTF_HDR_OFF_LENGTH = (TFTF_HDR_OFF_NAME +
+                       TFTF_HDR_LEN_NAME)
+TFTF_HDR_OFF_LOAD_BASE = (TFTF_HDR_OFF_LENGTH +
+                          TFTF_HDR_LEN_LENGTH)
+TFTF_HDR_OFF_EXPANDED_LENGTH = (TFTF_HDR_OFF_LOAD_BASE +
+                                TFTF_HDR_LEN_LOAD_BASE)
+TFTF_HDR_OFF_START_LOCATION = (TFTF_HDR_OFF_EXPANDED_LENGTH +
+                               TFTF_HDR_LEN_EXPANDED_LENGTH)
+TFTF_HDR_OFF_UNIPRO_MFGR_ID = (TFTF_HDR_OFF_START_LOCATION +
+                               TFTF_HDR_LEN_START_LOCATION)
+TFTF_HDR_OFF_UNIPRO_PRODUCT_ID = (TFTF_HDR_OFF_UNIPRO_MFGR_ID +
+                                  TFTF_HDR_LEN_UNIPRO_MFGR_ID)
+TFTF_HDR_OFF_ARA_VENDOR_ID = (TFTF_HDR_OFF_UNIPRO_PRODUCT_ID +
+                              TFTF_HDR_LEN_UNIPRO_PRODUCT_ID)
+TFTF_HDR_OFF_ARA_PRODUCT_ID = (TFTF_HDR_OFF_ARA_VENDOR_ID +
+                               TFTF_HDR_LEN_ARA_VENDOR_ID)
+TFTF_HDR_OFF_SECTIONS = (TFTF_HDR_OFF_ARA_PRODUCT_ID +
+                        TFTF_HDR_LEN_ARA_PRODUCT_ID)  # Start of sections array
+TFTF_HDR_OFF_PADDING = (TFTF_HDR_OFF_SECTIONS + TFTF_HDR_LEN_SECTION_TABLE)
 
 
 # TFTF Signature Block layout
-TFTF_SIGNATURE_KEY_NAME_LENGTH = 64
-TFTF_SIGNATURE_KEY_HASH_LENGTH = 32
-TFTF_SIGNATURE_OFF_LENGTH = 0x00
-TFTF_SIGNATURE_OFF_TYPE = 0x04
-TFTF_SIGNATURE_OFF_KEY_NAME = 0x08
-TFTF_SIGNATURE_OFF_KEY_HASH = 0x48
-TFTF_SIGNATURE_OFF_KEY_SIGNATURE = 0x68
-# Size of the fixed portion of the signature block
-TFTF_SIGNATURE_BLOCK_SIZE = TFTF_SIGNATURE_OFF_KEY_SIGNATURE
+TFTF_SIGNATURE_KEY_NAME_LENGTH = 96
+TFTF_SIGNATURE_SIGNATURE_LENGTH = 256
+
+# TFTF signature block field lengths
+TFTF_SIGNATURE_LEN_LENGTH = 4
+TFTF_SIGNATURE_LEN_TYPE = 4
+TFTF_SIGNATURE_LEN_KEY_NAME = TFTF_SIGNATURE_KEY_NAME_LENGTH
+TFTF_SIGNATURE_LEN_KEY_SIGNATURE = TFTF_SIGNATURE_SIGNATURE_LENGTH
+TFTF_SIGNATURE_LEN_FIXED_PART = (TFTF_SIGNATURE_LEN_LENGTH +
+                                 TFTF_SIGNATURE_LEN_TYPE +
+                                 TFTF_SIGNATURE_LEN_KEY_NAME)
+
+# TFTF signature block field offsets
+TFTF_SIGNATURE_OFF_LENGTH = 0 # 0x00
+TFTF_SIGNATURE_OFF_TYPE = (TFTF_SIGNATURE_OFF_LENGTH + TFTF_SIGNATURE_LEN_LENGTH)  # 0x04
+TFTF_SIGNATURE_OFF_KEY_NAME = (TFTF_SIGNATURE_OFF_TYPE + TFTF_SIGNATURE_LEN_TYPE)  # 0x08
+TFTF_SIGNATURE_OFF_KEY_SIGNATURE = (TFTF_SIGNATURE_OFF_KEY_NAME + TFTF_SIGNATURE_LEN_KEY_NAME)  # 0x68
 
 # TFTF Signature Types and associated dictionary of types and names
 # NOTE: When adding new types, both the "define" and the dictionary
@@ -120,6 +178,7 @@ TFTF_SIGNATURE_BLOCK_SIZE = TFTF_SIGNATURE_OFF_KEY_SIGNATURE
 TFTF_SIGNATURE_TYPE_UNKNOWN = 0x00
 TFTF_SIGNATURE_TYPE_RSA_2048_SHA_256 = 0x01
 tftf_signature_types = {"rsa2048-sha256": TFTF_SIGNATURE_TYPE_RSA_2048_SHA_256}
+tftf_signature_names = {TFTF_SIGNATURE_TYPE_RSA_2048_SHA_256: "rsa2048-sha256"}
 
 TFTF_FILE_EXTENSION = ".bin"
 
@@ -204,7 +263,7 @@ class TftfSection:
                   self.expanded_length,
                   self.copy_offset,
                   self.section_type)
-        return offset + TFTF_SECTION_HDR_LENGTH
+        return offset + TFTF_SECTION_LEN
 
     def update(self, copy_offset):
         # Update a section header at the specifed offset, and return an
@@ -272,22 +331,21 @@ class TftfSection:
         if self.section_type == TFTF_SECTION_TYPE_SIGNATURE:
             # Signature blocks have a known format which we can break down
             # for the user
-            key_hash = blob[TFTF_SIGNATURE_OFF_KEY_HASH:
-                            TFTF_SIGNATURE_OFF_KEY_SIGNATURE]
             sig_block = unpack_from("<LL64s", blob, 0)
+            sig_type = tftf_signature_names[sig_block[1]]
+            if not sig_type:
+                sig_type = "UNKNOWN"
+            print("Sig type:", sig_type) #*****
             print("{0:s}  Length:    {1:08x}".format(indent, sig_block[0]))
-            print("{0:s}  Sig. type: {1:d}".format(indent, sig_block[1]))
+            print("{0:s}  Sig. type: {1:d} ({2:s})".format(indent, sig_block[1], sig_type))
             print("{0:s}  Key name:".format(indent))
             print("{0:s}      '{1:4s}'".format(indent, sig_block[2]))
-            print("{0:s}  Key hash:".format(indent))
-            print("{0:s}      {1:s}".format(indent,
-                                            binascii.hexlify(key_hash)))
-            print("{0:s}    Signature:".format(indent))
+            print("{0:s}  Signature:".format(indent))
             display_binary_data(blob[TFTF_SIGNATURE_OFF_KEY_SIGNATURE:],
-                                True, indent + "        ")
+                                True, indent + "       ")
         else:
             # The default is to show the blob as a binary dump.
-            display_binary_data(blob, False, indent + "  ")
+            display_binary_data(blob, False, indent + " ")
         print("")
 
 
@@ -391,11 +449,11 @@ class Tftf:
 
         # Parse the table of section headers
         section_offset = TFTF_HDR_OFF_SECTIONS
-        for section_index in range(TFTF_MAX_SECTIONS):
+        for section_index in range(TFTF_HDR_NUM_SECTIONS):
             section = TftfSection(0, 0, 0, 0, None)
             if section.unpack(self.tftf_buf, section_offset):
                 self.sections.append(section)
-                section_offset += TFTF_SECTION_HDR_LENGTH
+                section_offset += TFTF_SECTION_LEN
 
                 if section.section_type == \
                    TFTF_SECTION_TYPE_END_OF_DESCRIPTORS:
@@ -442,7 +500,7 @@ class Tftf:
         # certificate blocks.)
 
         num_sections = len(self.sections)
-        if num_sections < TFTF_MAX_SECTIONS:
+        if num_sections < TFTF_HDR_NUM_SECTIONS:
             # Insert the section to the section list, just in front of
             # the end-of-table marker.
             #
@@ -474,7 +532,7 @@ class Tftf:
         # (This would be called by "create-tftf" while/after parsing section
         # parameters)
 
-        if len(self.sections) < TFTF_MAX_SECTIONS:
+        if len(self.sections) < TFTF_HDR_NUM_SECTIONS:
             try:
                 with open(filename, 'rb') as readfile:
                     section_data = readfile.read()
@@ -684,13 +742,13 @@ class Tftf:
                 print(section_string)
 
         # Note any unused sections
-        num_unused_sections = TFTF_MAX_SECTIONS - len(self.sections)
+        num_unused_sections = TFTF_HDR_NUM_SECTIONS - len(self.sections)
         if num_unused_sections > 1:
             print("{0:s}  {1:2d} (unused)".format(indent, len(self.sections)))
         if num_unused_sections > 2:
             print("{0:s}   :    :".format(indent))
         if num_unused_sections > 0:
-            print("{0:s}  {1:2d} (unused)".format(indent, TFTF_MAX_SECTIONS-1))
+            print("{0:s}  {1:2d} (unused)".format(indent, TFTF_HDR_NUM_SECTIONS-1))
         print(" ")
 
     def display_data(self, title=None, indent=""):
@@ -744,7 +802,7 @@ class Tftf:
         # Flush any changes out to the buffer and return the substring
         self.pack()
         slice_end = TFTF_HDR_OFF_SECTIONS + \
-            section_index * TFTF_SECTION_HDR_LENGTH
+            section_index * TFTF_SECTION_LEN
         return self.tftf_buf[0:slice_end]
 
     def get_section_data_up_to_section(self, section_index):
@@ -818,7 +876,7 @@ class Tftf:
 
         # Dump the section descriptors (used and free)
         section_offset = base_offset + TFTF_HDR_OFF_SECTIONS
-        for index in range(TFTF_MAX_SECTIONS):
+        for index in range(TFTF_HDR_NUM_SECTIONS):
             wf.write("{0:s}section[{1:d}].section_length  {2:08x}\n".
                      format(prefix, index,
                             section_offset + TFTF_SECTION_OFF_LENGTH))
@@ -831,7 +889,7 @@ class Tftf:
             wf.write("{0:s}section[{1:d}].type  {2:08x}\n".
                      format(prefix, index,
                             section_offset + TFTF_SECTION_OFF_SECTION_TYPE))
-            section_offset += TFTF_SECTION_HDR_LENGTH
+            section_offset += TFTF_SECTION_LEN
 
         # Dump the padding (the remainder of the TFTF header
         wf.write("{0:s}padding  {1:08x}\n".

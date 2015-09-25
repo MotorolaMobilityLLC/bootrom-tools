@@ -33,14 +33,14 @@ from time import gmtime, strftime
 from struct import unpack_from, pack_into
 from ffff_element import FFFF_HDR_LENGTH, FFFF_HDR_VALID, \
     FFFF_MAX_HEADER_BLOCK_SIZE, FFFF_HDR_OFF_TAIL_SENTINEL, \
-    FFFF_HDR_OFF_ELEMENT_TBL, FFFF_MAX_ELEMENTS, FfffElement, \
+    FFFF_HDR_OFF_ELEMENT_TBL, FFFF_HDR_NUM_ELEMENTS, FfffElement, \
     FFFF_ELT_LENGTH, FFFF_HDR_OFF_FLASH_IMAGE_NAME, \
     FFFF_HDR_OFF_FLASH_CAPACITY, FFFF_FLASH_IMAGE_NAME_LENGTH, \
     FFFF_ELEMENT_END_OF_ELEMENT_TABLE, FFFF_HEADER_COLLISION, \
     FFFF_HDR_ERASED, FFFF_SENTINEL, \
     FFFF_HDR_INVALID, FFFF_HDR_OFF_PADDING, FFFF_HDR_OFF_SENTINEL, \
     FFFF_HDR_OFF_TIMESTAMP, FFFF_HDR_OFF_ERASE_BLOCK_SIZE, \
-    FFFF_HDR_OFF_HDR_BLOCK_SIZE, FFFF_HDR_OFF_FLASH_IMAGE_LENGTH, \
+    FFFF_HDR_OFF_HEADER_SIZE, FFFF_HDR_OFF_FLASH_IMAGE_LENGTH, \
     FFFF_HDR_OFF_HEADER_GENERATION_NUM, FFFF_ELT_OFF_TYPE, FFFF_ELT_OFF_ID, \
     FFFF_ELT_OFF_GENERATION, FFFF_ELT_OFF_LOCATION, \
     FFFF_ELT_OFF_LENGTH
@@ -104,7 +104,6 @@ class Ffff:
         # adding sections manually later
         self.add_element(FFFF_ELEMENT_END_OF_ELEMENT_TABLE, 0, 0, 0, 0, None)
 
-
     def header_block_size(self):
         return header_block_size(self.erase_block_size)
 
@@ -134,7 +133,7 @@ class Ffff:
         # Parse the table of element headers
         self.elements = []
         offset = FFFF_HDR_OFF_ELEMENT_TBL
-        for index in range(FFFF_MAX_ELEMENTS):
+        for index in range(FFFF_HDR_NUM_ELEMENTS):
             element = FfffElement(index,
                                   self.ffff_buf,
                                   self.flash_capacity,
@@ -191,7 +190,7 @@ class Ffff:
         parameters.)
         """
         num_elements = len(self.elements)
-        if num_elements < FFFF_MAX_ELEMENTS:
+        if num_elements < FFFF_HDR_NUM_ELEMENTS:
             element = FfffElement(len(self.elements),
                                   self.ffff_buf,
                                   self.flash_capacity,
@@ -448,12 +447,12 @@ class Ffff:
                 break
 
         # Note any unused elements
-        num_unused_elements = FFFF_MAX_ELEMENTS - len(self.elements)
+        num_unused_elements = FFFF_HDR_NUM_ELEMENTS - len(self.elements)
         if num_unused_elements > 1:
             print("  {0:2d} (unused)".format(len(self.elements)))
             print("   :    :")
         if num_unused_elements > 0:
-            print("  {0:2d} (unused)".format(FFFF_MAX_ELEMENTS-1))
+            print("  {0:2d} (unused)".format(FFFF_HDR_NUM_ELEMENTS-1))
 
     def display_element_data(self, header_index):
         # Display the element data (TFTFs) from the element table
@@ -528,7 +527,7 @@ class Ffff:
         wf.write("{0:s}erase_block_size  {1:08x}\n".
                  format(prefix, base_offset + FFFF_HDR_OFF_ERASE_BLOCK_SIZE))
         wf.write("{0:s}header_size  {1:08x}\n".
-                 format(prefix, base_offset + FFFF_HDR_OFF_HDR_BLOCK_SIZE))
+                 format(prefix, base_offset + FFFF_HDR_OFF_HEADER_SIZE))
         wf.write("{0:s}image_length  {1:08x}\n".
                  format(prefix,
                         base_offset + FFFF_HDR_OFF_FLASH_IMAGE_LENGTH))
@@ -540,7 +539,7 @@ class Ffff:
         wf.write("{0:s}element_table  {1:08x}\n".
                  format(prefix, base_offset + FFFF_HDR_OFF_ELEMENT_TBL))
         element_offset = base_offset + FFFF_HDR_OFF_ELEMENT_TBL
-        for index in range(FFFF_MAX_ELEMENTS):
+        for index in range(FFFF_HDR_NUM_ELEMENTS):
             wf.write("{0:s}element[{1:d}].type  {2:08x}\n".
                      format(prefix, index,
                             element_offset + FFFF_ELT_OFF_TYPE))
