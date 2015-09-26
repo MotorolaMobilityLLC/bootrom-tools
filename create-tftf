@@ -34,7 +34,8 @@ import argparse
 import errno
 from tftf import Tftf, TFTF_SECTION_TYPE_RAW_CODE, \
     TFTF_SECTION_TYPE_RAW_DATA, TFTF_SECTION_TYPE_MANIFEST, \
-    TFTF_HDR_NUM_SECTIONS
+    TFTF_HDR_NUM_SECTIONS, \
+    TFTF_HEADER_SIZE_MIN, TFTF_HEADER_SIZE_MAX, TFTF_HEADER_SIZE_DEFAULT
 from util import error
 import io
 from elftools.elf.elffile import ELFFile
@@ -153,6 +154,11 @@ def validate_args(args, sections):
     if args.ara_stage < 1 or args.ara_stage > 3:
         error("--ara-stage is out of range")
         success = False
+    if (args.header_size < TFTF_HEADER_SIZE_MIN) or \
+       (args.header_size > TFTF_HEADER_SIZE_MAX):
+        error("--header_size is out of range ({0:d}-{1:d})".
+              format(TFTF_HEADER_SIZE_MIN, TFTF_HEADER_SIZE_MAX))
+        success = False
     if not args.out:
         args.out = 'ara:{:08x}:{:08x}:{:08x}:{:08x}:{:02x}.tftf'.format(
                    args.unipro_mfg, args.unipro_pid, args.ara_vid,
@@ -166,18 +172,18 @@ def main():
 
     This is covered in detail in "ES3 Bridge ASIC Boot ROM High Level Design".
 
-    Usage: create-tftf --load <num> --start <num> --out <file> \
+    Usage: create-tftf --start <num> --out <file> {--header-size <num>} \
            {--name <string>} {--unipro-mfg} {--unipro-pid} \
            {--ara-vid} {--ara-pid} {--ara-stage} \
-           {-v | --verbose} {--map} \
-           [<section_type> <file> {--offset <num>}]...
+           {-v | --verbose} {--map} {--header-size}\
+           [<section_type> <file> {--load <num>} --class <num>} --id <num>}]...
     Where:
-        --load
-            The memory location where the package will be loaded.
         --start
             The memory location of the package entry point.
         --out
             Specifies the output file
+        --header-size
+            The size of the generated TFTF header, in bytes (512)
         --name
             Package name
         --unipro-mfg
@@ -295,6 +301,12 @@ def main():
                         default=DEFAULT_ARA_BOOT_STAGE,
                         help="The ARA boot stage")
 
+    parser.add_argument("--header-size",
+                        type=auto_int,
+                        default=TFTF_HEADER_SIZE_DEFAULT,
+                        help="The size of the generated TFTF header, "
+                             "in bytes (512)")
+
     args = parser.parse_args()
 
     # Sanity-check the arguments
@@ -303,7 +315,7 @@ def main():
         sys.exit(errno.EINVAL)
 
     # Populate the TFTF header from the command line args
-    tftf_header = Tftf()
+    tftf_header = Tftf(args.header_size)
     tftf_header.firmware_package_name = args.name
     if args.load != 0:
         tftf_header.load_base = args.load

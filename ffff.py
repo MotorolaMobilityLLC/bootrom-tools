@@ -31,7 +31,7 @@
 from __future__ import print_function
 from time import gmtime, strftime
 from struct import unpack_from, pack_into
-from ffff_element import FFFF_HDR_LENGTH, FFFF_HDR_VALID, \
+from ffff_element import FFFF_HDR_VALID, \
     FFFF_MAX_HEADER_BLOCK_SIZE, FFFF_HDR_OFF_TAIL_SENTINEL, \
     FFFF_HDR_OFF_ELEMENT_TBL, FFFF_HDR_NUM_ELEMENTS, FfffElement, \
     FFFF_ELT_LENGTH, FFFF_HDR_OFF_FLASH_IMAGE_NAME, \
@@ -44,21 +44,25 @@ from ffff_element import FFFF_HDR_LENGTH, FFFF_HDR_VALID, \
     FFFF_HDR_OFF_HEADER_GENERATION_NUM, FFFF_HDR_OFF_RESERVED, \
     FFFF_ELT_OFF_TYPE, FFFF_ELT_OFF_CLASS, FFFF_ELT_OFF_ID, \
     FFFF_ELT_OFF_GENERATION, FFFF_ELT_OFF_LOCATION, \
-    FFFF_ELT_OFF_LENGTH, FFFF_RESERVED
+    FFFF_ELT_OFF_LENGTH, FFFF_RESERVED, FFFF_HDR_LEN_FIXED_PART, \
+    FFFF_HEADER_SIZE_MIN, FFFF_HEADER_SIZE_MAX, FFFF_HEADER_SIZE_DEFAULT
 import sys
-
 from util import error, is_power_of_2, next_boundary, is_constant_fill, \
     PROGRAM_ERRORS
 
 
-def header_block_size(erase_block_size):
+def get_header_block_size(erase_block_size, header_size):
     # Determine the size of the FFFF header block
     #
-    # The size is defined as some power-of-2 * the erase-block-size
-
-    for size in range(erase_block_size, FFFF_MAX_HEADER_BLOCK_SIZE):
-        if size > FFFF_HDR_LENGTH:
-            return size
+    # The "header block size" is defined as some power-of-2 * the
+    # erase-block-size
+    size = erase_block_size
+    while size < FFFF_MAX_HEADER_BLOCK_SIZE:
+        if size > header_size:
+            break
+        else:
+            size <<= 1
+    return size
 
 
 # FFFF representation
@@ -76,7 +80,8 @@ class Ffff:
     """
 
     def __init__(self, buf, offset, flash_image_name, flash_capacity,
-                 erase_block_size, image_length, header_generation_number):
+                 erase_block_size, image_length, header_generation_number,
+                 header_size):
         """FFFF constructor"""
         # FFFF header fields
         self.sentinel = ""
@@ -84,7 +89,6 @@ class Ffff:
         self.flash_image_name = flash_image_name
         self.flash_capacity = flash_capacity
         self.erase_block_size = erase_block_size
-        self.header_size = FFFF_HDR_LENGTH
         self.flash_image_length = image_length
         self.header_generation_number = header_generation_number
         self.reserved = [0] * FFFF_RESERVED
@@ -93,6 +97,13 @@ class Ffff:
         self.tail_sentinel = ""
 
         # Private vars
+        if (header_size == 0):
+            # We'll fill it in from parsing the file
+            self.header_size = FFFF_HEADER_SIZE_DEFAULT
+        else:
+            self.header_size = header_size
+        self.recalculate_header_offsets()
+
         self.ffff_buf = buf
         self.header_offset = offset
         self.collisions = []
@@ -101,7 +112,7 @@ class Ffff:
         self.duplicates_found = False
         self.invalid_elements_found = False
         self.header_validity = FFFF_HDR_VALID
-        self.element_location_min = 2 * self.header_block_size()
+        self.element_location_min = 2 * self.get_header_block_size()
         self.element_location_max = image_length
 
         # Salt the element table with the end-of-table, because we will be
@@ -109,8 +120,38 @@ class Ffff:
         self.add_element(FFFF_ELEMENT_END_OF_ELEMENT_TABLE,
                          0, 0, 0, 0, 0, None)
 
-    def header_block_size(self):
-        return header_block_size(self.erase_block_size)
+    def recalculate_header_offsets(self):
+        """ Recalculate element table size and offsets from header_size
+
+        Because we have variable-size FFFF headers, we need to recalculate the
+        number of entries in the section table, and the offsets to all fields
+        which follow.
+        """
+        """ Recalculate element table size and offsets from header_size
+
+        Because we have variable-size FFFF headers, we need to recalculate the
+        number of entries in the section table, and the offsets to all fields
+        which follow.
+        """
+        global FFFF_HDR_NUM_ELEMENTS, FFFF_HDR_LEN_ELEMENT_TBL, \
+            FFFF_HDR_LEN_PADDING, FFFF_HDR_OFF_PADDING, \
+            FFFF_HDR_OFF_TAIL_SENTINEL
+        # TFTF section table and derived lengths
+        FFFF_HDR_NUM_ELEMENTS = \
+            ((self.header_size - FFFF_HDR_LEN_FIXED_PART) // FFFF_ELT_LENGTH)
+        FFFF_HDR_LEN_ELEMENT_TBL = (FFFF_HDR_NUM_ELEMENTS * FFFF_ELT_LENGTH)
+        FFFF_HDR_LEN_PADDING = (self.header_size -
+                                (FFFF_HDR_LEN_FIXED_PART +
+                                 FFFF_HDR_LEN_ELEMENT_TBL))
+
+        # Offsets to fields following the section table
+        FFFF_HDR_OFF_PADDING = (FFFF_HDR_OFF_ELEMENT_TBL +
+                                FFFF_HDR_LEN_ELEMENT_TBL)
+        FFFF_HDR_OFF_TAIL_SENTINEL = (FFFF_HDR_OFF_PADDING +
+                                      FFFF_HDR_LEN_PADDING)
+
+    def get_header_block_size(self):
+        return get_header_block_size(self.erase_block_size, self.header_size)
 
     def unpack(self):
         """Unpack an FFFF header from a buffer"""
@@ -129,13 +170,18 @@ class Ffff:
         for i in range(FFFF_RESERVED):
             self.reserved[i] = ffff_hdr[8+i]
 
-        # unpack the tail sentinel
+        # Now that we have parsed the header_size, recalculate the size of the
+        # element table and the offsets to all FFFF header fields which follow
+        # it.
+        self.recalculate_header_offsets()
+
+        # Unpack the tail sentinel
         ffff_hdr = unpack_from("<16s", self.ffff_buf,
                                self.header_offset + FFFF_HDR_OFF_TAIL_SENTINEL)
         self.tail_sentinel = ffff_hdr[0]
 
         # Determine the ROM range that can hold the elements
-        self.element_location_min = 2 * self.header_block_size()
+        self.element_location_min = 2 * self.get_header_block_size()
         self.element_location_max = self.flash_capacity
 
         # Parse the table of element headers
@@ -173,7 +219,7 @@ class Ffff:
                   self.header_offset + FFFF_HDR_OFF_FLASH_CAPACITY,
                   self.flash_capacity,
                   self.erase_block_size,
-                  FFFF_HDR_LENGTH,
+                  self.header_size,
                   self.flash_image_length,
                   self.header_generation_number)
         for i in range(FFFF_RESERVED):
@@ -261,13 +307,13 @@ class Ffff:
             if not elt_a.validate(self.element_location_min,
                                   self.element_location_max):
                 self.invalid_elements_found = True
-            if elt_a.element_location < (2 * self.header_block_size()):
+            if elt_a.element_location < (2 * self.get_header_block_size()):
                 self.collisions_found = True
                 collision += [FFFF_HEADER_COLLISION]
                 error("Element at location " +
                       format(elt_a.element_location, "#x") +
                       " collides with two header blocks of size " +
-                      format(2 * self.header_block_size(), "#x"))
+                      format(2 * self.get_header_block_size(), "#x"))
 
             for j, elt_b in enumerate(self.elements):
                 # skip checking one's self
@@ -320,7 +366,7 @@ class Ffff:
         # Check for erased header
 
         span = self.ffff_buf[self.header_offset:
-                             self.header_offset+FFFF_HDR_LENGTH]
+                             self.header_offset+self.header_size]
         if is_constant_fill(span, 0) or \
            is_constant_fill(span, 0xff):
             error("FFFF header validates as erased.")
@@ -335,7 +381,11 @@ class Ffff:
             return self.header_validity
 
         # Verify sizes
-        if not is_power_of_2(self.erase_block_size):
+        if (self.header_size < FFFF_HEADER_SIZE_MIN) or \
+           (self.header_size > FFFF_HEADER_SIZE_MAX):
+            error("header_size is out of range")
+            return self.header_validity
+        elif not is_power_of_2(self.erase_block_size):
             error("Erase block size must be 2**n")
             self.header_validity = FFFF_HDR_INVALID
             return self.header_validity
@@ -352,14 +402,13 @@ class Ffff:
                 return self.header_validity
 
         # Verify that the unused portions of the header are zeroed, per spec.
-        print("Num elements:", len(self.elements)) #*****
         span_start = self.header_offset + FFFF_HDR_OFF_ELEMENT_TBL + \
             len(self.elements) * FFFF_ELT_LENGTH
         span_end = self.header_offset + FFFF_HDR_OFF_TAIL_SENTINEL - \
             span_start
         if not is_constant_fill(self.ffff_buf[span_start:span_end], 0):
-            error("Unused portions of FFFF header are non-zero: " \
-                   "(0x{0:x}-0x{1:x})".format(span_start, span_end))
+            error("Unused portions of FFFF header are non-zero: "
+                  "(0x{0:x}-0x{1:x})".format(span_start, span_end))
             self.header_validity = FFFF_HDR_INVALID
             return self.header_validity
 

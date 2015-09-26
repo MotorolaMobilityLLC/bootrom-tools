@@ -78,7 +78,7 @@ def main():
 
     # Walk the list of files
     for f in args.files:
-        tftf_header = Tftf(f)
+        tftf_header = Tftf(0, f)
         tftf_header.display(f)
         if args.verbose:
             tftf_header.display_data(f)

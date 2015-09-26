@@ -72,10 +72,12 @@ countable_tftf_types = \
 
 
 # Other TFTF header constants (mostly field sizes)
+TFTF_HEADER_SIZE_MIN = 512
+TFTF_HEADER_SIZE_MAX = 4096
+TFTF_HEADER_SIZE_DEFAULT = 512
 TFTF_SENTINEL = "TFTF"
 TFTF_TIMESTAMP_LENGTH = 16
 TFTF_FW_PKG_NAME_LENGTH = 48
-TFTF_HDR_LENGTH = 512
 TFTF_RESERVED = 6       # Header words reserved for future use
 TFTF_RSVD_SIZE = 4      # Size of each reserved item
 
@@ -105,6 +107,7 @@ TFTF_SECTION_OFF_EXPANDED_LENGTH = (TFTF_SECTION_OFF_LOAD_ADDRESS +
 
 # TFTF header field lengths
 TFTF_HDR_LEN_SENTINEL = 4
+TFTF_HDR_LEN_HEADER_SIZE = 4
 TFTF_HDR_LEN_TIMESTAMP = 16
 TFTF_HDR_LEN_NAME = 48
 TFTF_HDR_LEN_PACKAGE_TYPE = 4
@@ -115,6 +118,7 @@ TFTF_HDR_LEN_ARA_VENDOR_ID = 4
 TFTF_HDR_LEN_ARA_PRODUCT_ID = 4
 TFTF_HDR_LEN_RESERVED = (TFTF_RESERVED * TFTF_RSVD_SIZE)
 TFTF_HDR_LEN_FIXED_PART = (TFTF_HDR_LEN_SENTINEL +
+                           TFTF_HDR_LEN_HEADER_SIZE +
                            TFTF_HDR_LEN_TIMESTAMP +
                            TFTF_HDR_LEN_NAME +
                            TFTF_HDR_LEN_PACKAGE_TYPE +
@@ -124,16 +128,18 @@ TFTF_HDR_LEN_FIXED_PART = (TFTF_HDR_LEN_SENTINEL +
                            TFTF_HDR_LEN_ARA_VENDOR_ID +
                            TFTF_HDR_LEN_ARA_PRODUCT_ID +
                            TFTF_HDR_LEN_RESERVED)
-TFTF_HDR_NUM_SECTIONS = ((TFTF_HDR_LENGTH - TFTF_HDR_LEN_FIXED_PART) //
-                         TFTF_SECTION_LEN)
+TFTF_HDR_NUM_SECTIONS = \
+    ((TFTF_HEADER_SIZE_DEFAULT - TFTF_HDR_LEN_FIXED_PART) // TFTF_SECTION_LEN)
 TFTF_HDR_LEN_SECTION_TABLE = (TFTF_HDR_NUM_SECTIONS * TFTF_SECTION_LEN)
-TFTF_HDR_LEN_PADDING = (TFTF_HDR_LENGTH -
+TFTF_HDR_LEN_PADDING = (TFTF_HEADER_SIZE_DEFAULT -
                         (TFTF_HDR_LEN_FIXED_PART + TFTF_HDR_LEN_SECTION_TABLE))
 
 # TFTF header field offsets
 TFTF_HDR_OFF_SENTINEL = 0
-TFTF_HDR_OFF_TIMESTAMP = (TFTF_HDR_OFF_SENTINEL +
-                          TFTF_HDR_LEN_SENTINEL)
+TFTF_HDR_OFF_HEADER_SIZE = (TFTF_HDR_OFF_SENTINEL +
+                            TFTF_HDR_LEN_SENTINEL)
+TFTF_HDR_OFF_TIMESTAMP = (TFTF_HDR_OFF_HEADER_SIZE +
+                          TFTF_HDR_LEN_HEADER_SIZE)
 TFTF_HDR_OFF_NAME = (TFTF_HDR_OFF_TIMESTAMP +
                      TFTF_HDR_LEN_TIMESTAMP)
 TFTF_HDR_OFF_PACKAGE_TYPE = (TFTF_HDR_OFF_NAME +
@@ -276,22 +282,6 @@ class TftfSection:
                   self.expanded_length)
         return offset + TFTF_SECTION_LEN
 
-#    def update(self, copy_offset):
-#        # Update a section header at the specifed offset, and return an
-#        # offset to the start of the next section
-#        #
-#        # Use this to sweep through the list of sections and update the
-#        # section copy_offsets to concatenate sections (except where the
-#        # user has specified an offset).
-#
-#        if self.section_type in countable_tftf_types:
-#            if self.copy_offset == 0:
-#                self.copy_offset = copy_offset
-#        else:
-#            self.copy_offset = 0
-#
-#        return self.copy_offset + self.expanded_length
-
     def section_name(self, section_type):
         # Convert a section type into textual form
 
@@ -365,9 +355,32 @@ class TftfSection:
 
 class Tftf:
     """TFTF representation"""
-    def __init__(self, filename=None):
+    def __init__(self, header_size, filename=None):
+        """ TFTF constructor
+
+        Basically, there are 2 logical constructor forms:
+            - Tftf(header_size) # create a blank TFTF with a given header size
+            - Tftf(filename)    # read an existing TFTF file into memory
+        But, because Python doesn't allow polymorphism, these take the
+        following forms:
+            - Tftf(header_size, None) # create a blank TFTF
+            - Tftf(0, filename)       # read an existing TFTF
+        """
+        # Size the buffer: if we're creating a blank TFTF use the supplied
+        # header_size. If we're loading it from a file, (header_size = 0 and
+        # a valid filename), allocate a default one and replace it with the
+        # one from the file
+
+        if (header_size != 0) and \
+            ((header_size < TFTF_HEADER_SIZE_MIN) or
+             (header_size > TFTF_HEADER_SIZE_MAX)):
+            raise ValueError("TFTF header size is out of range")
+
         # Private fields
-        self.tftf_buf = bytearray(TFTF_HDR_LENGTH)
+        if (header_size == 0):
+            self.tftf_buf = bytearray(TFTF_HEADER_SIZE_DEFAULT)
+        else:
+            self.tftf_buf = bytearray(header_size)
         self.collisions = []
         self.collisions_found = False
         self.header_validity = TFTF_INVALID
@@ -375,6 +388,7 @@ class Tftf:
 
         # Header fields
         self.sentinel = 0
+        self.header_size = header_size
         self.timestamp = ""
         self.firmware_package_name = ""
         self.package_type = 0
@@ -395,6 +409,34 @@ class Tftf:
             # adding sections manually later
             eot = TftfSection(TFTF_SECTION_TYPE_END_OF_DESCRIPTORS)
             self.sections.append(eot)
+
+        # Validate the header size (via parameter or the file)
+        if self.header_size != 0:
+            if (self.header_size < TFTF_HEADER_SIZE_MIN) or \
+               (self.header_size > TFTF_HEADER_SIZE_MAX):
+                raise ValueError("TFTF header size is out of range")
+            self.recalculate_header_offsets()
+
+    def recalculate_header_offsets(self):
+        """ Recalculate section table size and offsets from header_size
+
+        Because we have variable-size TFTF headers, we need to recalculate the
+        number of entries in the section table, and the offsets to all fields
+        which follow.
+        """
+        global TFTF_HDR_NUM_SECTIONS, TFTF_HDR_LEN_SECTION_TABLE, \
+            TFTF_HDR_LEN_PADDING, TFTF_HDR_OFF_PADDING
+        # TFTF section table and derived lengths
+        TFTF_HDR_NUM_SECTIONS = \
+            ((self.header_size - TFTF_HDR_LEN_FIXED_PART) // TFTF_SECTION_LEN)
+        TFTF_HDR_LEN_SECTION_TABLE = (TFTF_HDR_NUM_SECTIONS * TFTF_SECTION_LEN)
+        TFTF_HDR_LEN_PADDING = \
+            self.header_size - \
+            (TFTF_HDR_LEN_FIXED_PART + TFTF_HDR_LEN_SECTION_TABLE)
+
+        # Offsets to fields following the section table
+        TFTF_HDR_OFF_PADDING = (TFTF_HDR_OFF_SECTIONS +
+                                TFTF_HDR_LEN_SECTION_TABLE)
 
     def load_tftf_file(self, filename):
         """Try to import a TFTF header and/or file
@@ -442,19 +484,25 @@ class Tftf:
 
     def unpack(self):
         # Unpack a TFTF header from a buffer
-        fmt_string = "<4s16s48sLLLLLL" + "L" * TFTF_RESERVED
+        fmt_string = "<4sL16s48sLLLLLL" + "L" * TFTF_RESERVED
         tftf_hdr = unpack_from(fmt_string, self.tftf_buf)
         self.sentinel = tftf_hdr[0]
-        self.timestamp = tftf_hdr[1]
-        self.firmware_package_name = tftf_hdr[2]
-        self.package_type = tftf_hdr[3]
-        self.start_location = tftf_hdr[4]
-        self.unipro_mfg_id = tftf_hdr[5]
-        self.unipro_pid = tftf_hdr[6]
-        self.ara_vid = tftf_hdr[7]
-        self.ara_pid = tftf_hdr[8]
+        self.header_size = tftf_hdr[1]
+        self.timestamp = tftf_hdr[2]
+        self.firmware_package_name = tftf_hdr[3]
+        self.package_type = tftf_hdr[4]
+        self.start_location = tftf_hdr[5]
+        self.unipro_mfg_id = tftf_hdr[6]
+        self.unipro_pid = tftf_hdr[7]
+        self.ara_vid = tftf_hdr[8]
+        self.ara_pid = tftf_hdr[9]
         for i in range(TFTF_RESERVED):
-            self.reserved[i] = tftf_hdr[9+i]
+            self.reserved[i] = tftf_hdr[10+i]
+
+        # Since the imported header_size may be different from our 512-byte
+        # default, we need to recalculate the size of the section table and
+        # offsets to all trailing fields
+        self.recalculate_header_offsets()
 
         # Purge (the EOT from) the list because we're populating the entire
         # list from the file
@@ -485,8 +533,9 @@ class Tftf:
         # Populate the fixed part of the TFTF header.
         # (Note that we need to break up the packing because the "s" format
         # doesn't zero-pad a string shorter than the field width)
-        pack_into("<4s16s", self.tftf_buf, 0,
+        pack_into("<4sL16s", self.tftf_buf, 0,
                   self.sentinel,
+                  self.header_size,
                   self.timestamp)
         if self.firmware_package_name:
             pack_into("<48s", self.tftf_buf, TFTF_HDR_OFF_NAME,
@@ -694,6 +743,8 @@ class Tftf:
                 indent, self.tftf_length))
         print("{0:s}  Sentinel:         '{1:4s}'".format(
             indent, self.sentinel))
+        print("{0:s}  Header size:       0x{1:08x} ({2:d})".format(
+            indent, self.header_size, self.header_size))
         print("{0:s}  Timestamp:        '{1:16s}'".format(
             indent, self.timestamp))
         print("{0:s}  Fw. pkg name:     '{1:48s}'".format(
@@ -711,7 +762,7 @@ class Tftf:
         print("{0:s}  Ara product ID:    0x{1:08x}".format(
             indent, self.ara_pid))
         for i, rsvd in enumerate(self.reserved):
-            print("  Reserved [{0:d}]:        0x{1:08x}".format(i, rsvd))
+            print("  Reserved [{0:d}]:      0x{1:08x}".format(i, rsvd))
 
         # 2. Dump the table of section headers
         print("{0:s}  Section Table (all values in hex):".format(indent))
@@ -750,7 +801,7 @@ class Tftf:
         print(title_string)
 
         # 2. Print the associated data blobs
-        offset = TFTF_HDR_LENGTH
+        offset = self.header_size
         for index, section in enumerate(self.sections):
             if section.section_type == TFTF_SECTION_TYPE_END_OF_DESCRIPTORS:
                 break
@@ -808,12 +859,12 @@ class Tftf:
 
         # Flush any changes out to the buffer and return the substring
         self.pack()
-        slice_end = TFTF_HDR_LENGTH
+        slice_end = self.header_size
         for index, section in enumerate(self.sections):
             if index >= section_index:
                 break
             slice_end += section.section_length
-        return self.tftf_buf[TFTF_HDR_LENGTH:slice_end]
+        return self.tftf_buf[self.header_size:slice_end]
 
     def create_map_file(self, base_name, base_offset, prefix=""):
         """Create a map file from the base name
@@ -842,6 +893,8 @@ class Tftf:
         # Add the header fields
         wf.write("{0:s}sentinel  {1:08x}\n".
                  format(prefix, base_offset + TFTF_HDR_OFF_SENTINEL))
+        wf.write("{0:s}header_size  {1:08x}\n".
+                 format(prefix, base_offset + TFTF_HDR_OFF_HEADER_SIZE))
         wf.write("{0:s}timestamp  {1:08x}\n".
                  format(prefix, base_offset + TFTF_HDR_OFF_TIMESTAMP))
         wf.write("{0:s}firmware_name  {1:08x}\n".
@@ -892,7 +945,7 @@ class Tftf:
                  format(prefix, base_offset + TFTF_HDR_OFF_PADDING))
 
         # Dump the section starts
-        base_offset += TFTF_HDR_LENGTH
+        base_offset += self.header_size
         for index, section in enumerate(self.sections):
             sn_name = "{0:s}section[{1:d}].{2:s}".\
                       format(prefix, index,

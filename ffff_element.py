@@ -82,10 +82,13 @@ FFFF_ELT_OFF_LOCATION = (FFFF_ELT_OFF_LENGTH + FFFF_ELT_LEN_LENGTH)
 FFFF_ELT_OFF_GENERATION = (FFFF_ELT_OFF_LOCATION + FFFF_ELT_LEN_LOCATION)
 
 # FFFF header & field sizes
+FFFF_HEADER_SIZE_MIN = 512
+FFFF_HEADER_SIZE_MAX = 32768
+FFFF_HEADER_SIZE_DEFAULT = 4096
+FFFF_HDR_LENGTH = 512
 FFFF_SENTINEL_LENGTH = 16
 FFFF_TIMESTAMP_LENGTH = 16
 FFFF_FLASH_IMAGE_NAME_LENGTH = 48
-FFFF_HDR_LENGTH = 512
 FFFF_RESERVED = 7       # Header words reserved for future use
 FFFF_RSVD_SIZE = 4      # Size of each reserved item
 
@@ -225,14 +228,14 @@ class FfffElement:
         if self.filename and not self.tftf_blob:
             # Create a TFTF blob and load the contents from the specified
             # TFTF file
-            self.tftf_blob = Tftf(self.filename)
+            self.tftf_blob = Tftf(0, self.filename)
             success = self.tftf_blob.load_tftf_file(self.filename)
             if success and self.tftf_blob.is_good():
                 # element_length must be that of the entire TFTF blob,
                 # not just the TFTF's "load_length" or "expanded_length".
                 self.element_length = self.tftf_blob.tftf_length
             else:
-                raise ValueError("Bad TFTF file:", self.filename)
+                raise ValueError("Bad TFTF file: {0:x}".format(self.filename))
         return True
 
     def unpack(self, buf, offset):
@@ -257,7 +260,7 @@ class FfffElement:
             # TFTF file
             span_start = self.element_location
             span_end = span_start + self.element_length
-            self.tftf_blob = Tftf(None)
+            self.tftf_blob = Tftf(0, None)
             span_start = self.element_location
             span_end = span_start + self.element_length
             self.tftf_blob.load_tftf_from_buffer(buf[span_start:span_end])

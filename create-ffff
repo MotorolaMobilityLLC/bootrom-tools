@@ -34,8 +34,10 @@ import argparse
 from ffff_romimage import FfffRomimage
 from ffff_element import FFFF_ELEMENT_STAGE2_FIRMWARE_PACKAGE, \
     FFFF_ELEMENT_STAGE3_FIRMWARE_PACKAGE, FFFF_ELEMENT_IMS_CERTIFICATE, \
-    FFFF_ELEMENT_CMS_CERTIFICATE, FFFF_ELEMENT_DATA, FFFF_HDR_NUM_ELEMENTS
-from ffff import header_block_size
+    FFFF_ELEMENT_CMS_CERTIFICATE, FFFF_ELEMENT_DATA, FFFF_HDR_NUM_ELEMENTS, \
+    FFFF_HEADER_SIZE_MIN, FFFF_HEADER_SIZE_MAX, FFFF_HEADER_SIZE_DEFAULT
+
+from ffff import get_header_block_size
 from util import error, block_aligned, PROGRAM_ERRORS
 
 # The current element being parsed.
@@ -156,6 +158,13 @@ def validate_block_arg(success, name, size, min_size):
 def validate_args(args, elements):
     # Sanity-check the command line args and return a "valid" flag
     success = True
+
+    if (args.header_size < FFFF_HEADER_SIZE_MIN) or \
+       (args.header_size > FFFF_HEADER_SIZE_MAX):
+        error("--header_size is out of range ({0:d}-{1:d})".
+              format(FFFF_HEADER_SIZE_MIN, FFFF_HEADER_SIZE_MAX))
+        success = False
+
     if not args.out:
         error("Missing --out file!")
         success = False
@@ -208,11 +217,13 @@ def validate_args(args, elements):
 
         # Does the element location fall within twice the header-block size
         # and the image length?
-        if not (element_location >= 2 * header_block_size(args.erase_size) and
-                element_location <= args.image_length):
+        hdr_size_blocks = get_header_block_size(args.erase_size,
+                                                args.header_size)
+        if (element_location < (2 * hdr_size_blocks)) or \
+           (element_location >= args.image_length):
             error("--element-location " + format(element_location, "#x") +
                   " outside the range of twice the header-block size " +
-                  format(header_block_size(args.erase_size), "#x") +
+                  format(2 * hdr_size_blocks, "#x") +
                   " and the --image-length " +
                   format(args.image_length, "#x"))
             success = False
@@ -229,6 +240,7 @@ def main():
 
     Usage: create-ffff --fc <num> --ebs <num> --length <num> --gen <num> \
            --out <file> {--name <string>} {-v | --verbose} {--map} \
+           {--header-size <num>} \
            [<element_type> <file> <element_option>]...
     Where:
         --fc | --flash-capacity
@@ -242,12 +254,14 @@ def main():
             on the Flash).
         --out
             Specifies the output file
+        --header-size
+            The size of the generated FFFF header, in bytes (4096)
         --name
             Flash image name
         -v | --verbose
-            Display the TFTF header and a synopsis of each TFTF section
+            Display the FFFF header and a synopsis of each FFFF section
         --map
-            Create a map file of the FFFF headers and each TFTF sections
+            Create a map file of the FFFF headers and each FFFF sections
         <element_type>
             Specifies a file for a given type of element:
             --s2f | --stage-2-fw
@@ -328,7 +342,7 @@ def main():
     # Flags args
     parser.add_argument("-v", "--verbose",
                         action='store_true',
-                        help="Dump the FFFFS header when done")
+                        help="Dump the FFFF header when done")
 
     parser.add_argument("--map", "-m",
                         action='store_true',
@@ -339,7 +353,7 @@ def main():
                         help="The firmware package name")
 
     parser.add_argument("--out",
-                        help="The TFTF output filename")
+                        help="The FFFF output filename")
 
     # Numeric args
     parser.add_argument("--flash-capacity", "--fc",
@@ -362,6 +376,12 @@ def main():
                         default=0,
                         help="The header generation number")
 
+    parser.add_argument("--header-size",
+                        type=auto_int,
+                        default=FFFF_HEADER_SIZE_DEFAULT,
+                        help="The size of the generated FFFF header, "
+                             "in bytes (4096)")
+
     args = parser.parse_args()
 
     # Flush any dangling element definition out to the element list.
@@ -376,7 +396,7 @@ def main():
     ffff_romimage = FfffRomimage()
     if not ffff_romimage.init(args.name, args.flash_capacity,
                               args.erase_size, args.image_length,
-                              args.generation):
+                              args.generation, args.header_size):
         error("Could not populate FFFF header from args")
         sys.exit(PROGRAM_ERRORS)
 

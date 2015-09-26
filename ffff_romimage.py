@@ -33,13 +33,15 @@ from string import rfind
 from struct import unpack_from
 from ffff_element import FFFF_MAX_HEADER_BLOCK_OFFSET, FFFF_SENTINEL, \
     FFFF_MAX_HEADER_BLOCK_SIZE, FFFF_HDR_OFF_TAIL_SENTINEL, \
-    FFFF_FILE_EXTENSION, FFFF_HDR_LENGTH, FFFF_HDR_VALID
+    FFFF_FILE_EXTENSION, FFFF_HDR_LENGTH, FFFF_HDR_VALID, \
+    FFFF_HEADER_SIZE_MIN, FFFF_HEADER_SIZE_MAX, FFFF_HEADER_SIZE_DEFAULT, \
+    FFFF_HDR_LEN_FIXED_PART, FFFF_ELT_LENGTH, FFFF_HDR_OFF_ELEMENT_TBL
 from ffff import Ffff
 from util import is_power_of_2
 import io
 
 
-# FFFF ROMimage representation
+# FFFF ROMimage representation (2x FFFF headers + Nx TFTF blobs)
 #
 class FfffRomimage:
 
@@ -52,6 +54,7 @@ class FfffRomimage:
         the image.
         """
         # FFFF header fields
+        self.header_size = FFFF_HEADER_SIZE_DEFAULT
         self.ffff0 = None
         self.ffff1 = None
         self.ffff_buf = None
@@ -65,7 +68,7 @@ class FfffRomimage:
         self.element_location_max = 0
 
     def init(self, flash_image_name, flash_capacity, erase_block_size,
-             image_length, header_generation_number):
+             image_length, header_generation_number, header_size):
         """"FFFF post-constructor initializer for a new FFFF
 
         FFFF post-constructor initializer for creating an FFFF (as opposed
@@ -74,12 +77,16 @@ class FfffRomimage:
         parameter.
         """
         # Validate the parameters
-        if not is_power_of_2(erase_block_size):
+        if (header_size < FFFF_HEADER_SIZE_MIN) or \
+           (header_size > FFFF_HEADER_SIZE_MAX):
+            raise ValueError("header_size is out of range")
+        elif not is_power_of_2(erase_block_size):
             raise ValueError("Erase block size must be 2**n")
         elif (image_length % erase_block_size) != 0:
             raise ValueError("Image length must be a multiple "
                              "of erase bock size")
 
+        self.header_size = header_size
         self.flash_image_name = flash_image_name
         self.flash_capacity = flash_capacity
         self.erase_block_size = erase_block_size
@@ -87,7 +94,7 @@ class FfffRomimage:
         self.header_generation_number = header_generation_number
 
         # Determine the ROM range that can hold the elements
-        self.element_location_min = 2 * self.header_block_size()
+        self.element_location_min = 2 * self.get_header_block_size()
         self.element_location_max = image_length
 
         # Resize the ROMimage buffer to the correct size
@@ -95,13 +102,22 @@ class FfffRomimage:
         #self.mv = memoryview(self.ffff_buf)
 
         # Create the 2 FFFF headers
-        self.ffff0 = Ffff(self.ffff_buf, 0, flash_image_name,
-                          flash_capacity, erase_block_size,
-                          image_length, header_generation_number)
-        self.ffff1 = Ffff(self.ffff_buf, self.header_block_size(),
-                          flash_image_name, flash_capacity,
-                          erase_block_size, image_length,
-                          header_generation_number)
+        self.ffff0 = Ffff(self.ffff_buf,
+                          0,
+                          flash_image_name,
+                          flash_capacity,
+                          erase_block_size,
+                          image_length,
+                          header_generation_number,
+                          header_size)
+        self.ffff1 = Ffff(self.ffff_buf,
+                          self.get_header_block_size(),
+                          flash_image_name,
+                          flash_capacity,
+                          erase_block_size,
+                          image_length,
+                          header_generation_number,
+                          header_size)
         return True
 
     def init_from_file(self, filename):
@@ -124,7 +140,7 @@ class FfffRomimage:
                     rf = None
 
             if not rf:
-                raise ValueError(" can't find FFFF file", filename)
+                raise IOError(" can't find FFFF file" + filename)
 
             try:
                 # Read the FFFF file.
@@ -136,57 +152,83 @@ class FfffRomimage:
                 rf.seek(0, 0)
                 rf.readinto(self.ffff_buf)
                 rf.close()
+            except IOError:
+                raise IOError("can't read {0:s}".format(filename))
 
-                self.get_romimage_characteristics()
+            self.get_romimage_characteristics()
 
-                # Create the 1st FFFF header/object
-                #self.mv = memoryview(self.ffff_buf)
-                self.ffff0 = Ffff(self.ffff_buf, 0,
-                                  self.flash_image_name,
-                                  self.flash_capacity,
-                                  self.erase_block_size,
-                                  self.flash_image_length,
-                                  self.header_generation_number)
-                self.ffff0.unpack()
+            # Create the 1st FFFF header/object
+            #self.mv = memoryview(self.ffff_buf)
+            self.ffff0 = Ffff(self.ffff_buf, 0,
+                              self.flash_image_name,
+                              self.flash_capacity,
+                              self.erase_block_size,
+                              self.flash_image_length,
+                              self.header_generation_number,
+                              0)
+            self.ffff0.unpack()
 
-                # Scan for 2nd header
-                offset = self.header_block_size()
-                while offset < FFFF_MAX_HEADER_BLOCK_OFFSET:
-                    # Unpack and validate the nose and tail sentinels
-                    ffff_hdr = unpack_from("<16s", self.ffff_buf,
-                                           offset)
-                    nose_sentinel = ffff_hdr[0]
-                    ffff_hdr = unpack_from("<16s", self.ffff_buf,
-                                           offset +
-                                           FFFF_HDR_OFF_TAIL_SENTINEL)
-                    tail_sentinel = ffff_hdr[0]
+            # Scan for 2nd header
+            offset = self.get_header_block_size()
+            while offset < FFFF_MAX_HEADER_BLOCK_OFFSET:
+                # Unpack and validate the nose and tail sentinels
+                ffff_hdr = unpack_from("<16s", self.ffff_buf,
+                                       offset)
+                nose_sentinel = ffff_hdr[0]
+                ffff_hdr = unpack_from("<16s", self.ffff_buf,
+                                       offset +
+                                       FFFF_HDR_OFF_TAIL_SENTINEL)
+                tail_sentinel = ffff_hdr[0]
 
-                    # Create the 2nd FFFF header/object?
-                    if nose_sentinel == FFFF_SENTINEL and \
-                            tail_sentinel == FFFF_SENTINEL:
-                        self.ffff1 = Ffff(self.ffff_buf, offset,
-                                          self.flash_image_name,
-                                          self.flash_capacity,
-                                          self.erase_block_size,
-                                          self.flash_image_length,
-                                          self.header_generation_number)
-                        self.ffff1.unpack()
-                        break
-                    else:
-                        offset <<= 1
-            except:
-                raise ValueError("can't read", filename)
+                # Create the 2nd FFFF header/object?
+                if nose_sentinel == FFFF_SENTINEL and \
+                        tail_sentinel == FFFF_SENTINEL:
+                    self.ffff1 = Ffff(self.ffff_buf, offset,
+                                      self.flash_image_name,
+                                      self.flash_capacity,
+                                      self.erase_block_size,
+                                      self.flash_image_length,
+                                      self.header_generation_number,
+                                      0)
+                    self.ffff1.unpack()
+                    break
+                else:
+                    offset <<= 1
         else:
             raise ValueError("no file specified")
 
         return True
 
-    def header_block_size(self):
+    def get_header_block_size(self):
         # Determine the size of the FFFF header block, defined as a
         # power-of-2 * the erase-block-size
         for size in range(self.erase_block_size, FFFF_MAX_HEADER_BLOCK_SIZE):
             if size > FFFF_HDR_LENGTH:
                 return size
+
+    def recalculate_header_offsets(self):
+        """ Recalculate element table size and offsets from header_size
+
+        Because we have variable-size FFFF headers, we need to recalculate the
+        number of entries in the section table, and the offsets to all fields
+        which follow.
+        """
+        global FFFF_HDR_NUM_ELEMENTS, FFFF_HDR_LEN_ELEMENT_TBL, \
+            FFFF_HDR_LEN_PADDING, FFFF_HDR_OFF_PADDING, \
+            FFFF_HDR_OFF_TAIL_SENTINEL
+        # TFTF section table and derived lengths
+        FFFF_HDR_NUM_ELEMENTS = \
+            ((self.header_size - FFFF_HDR_LEN_FIXED_PART) // FFFF_ELT_LENGTH)
+        FFFF_HDR_LEN_ELEMENT_TBL = (FFFF_HDR_NUM_ELEMENTS * FFFF_ELT_LENGTH)
+        FFFF_HDR_LEN_PADDING = (self.header_size -
+                                (FFFF_HDR_LEN_FIXED_PART +
+                                 FFFF_HDR_LEN_ELEMENT_TBL))
+
+        # Offsets to fields following the section table
+        FFFF_HDR_OFF_PADDING = (FFFF_HDR_OFF_ELEMENT_TBL +
+                                FFFF_HDR_LEN_ELEMENT_TBL)
+        FFFF_HDR_OFF_TAIL_SENTINEL = (FFFF_HDR_OFF_PADDING +
+                                      FFFF_HDR_LEN_PADDING)
 
     def get_romimage_characteristics(self):
         # Extract the ROMimage size and characteritics from the first FFFF
@@ -203,14 +245,18 @@ class FfffRomimage:
         self.flash_image_length = ffff_hdr[6]
         self.header_generation_number = ffff_hdr[7]
 
+        # Because we have variable-size FFFF headers, we need to recalculate
+        # the number of entries in the section table, and the offsets to all
+        # fields which follow.
+        self.recalculate_header_offsets()
+
         # Unpack the 2nd sentinel at the tail
         ffff_hdr = unpack_from("<16s", self.ffff_buf,
                                FFFF_HDR_OFF_TAIL_SENTINEL)
         tail_sentinel = ffff_hdr[0]
 
         # Verify the sentinels
-        if sentinel != FFFF_SENTINEL or \
-                tail_sentinel != FFFF_SENTINEL:
+        if sentinel != FFFF_SENTINEL or tail_sentinel != FFFF_SENTINEL:
             raise ValueError("invalid sentinel")
 
         # Validate the block size and image length
@@ -221,7 +267,7 @@ class FfffRomimage:
                              "of erase bock size")
 
         # Determine the ROM range that can hold the elements
-        self.element_location_min = 2 * self.header_block_size()
+        self.element_location_min = 2 * self.get_header_block_size()
         self.element_location_max = self.flash_capacity
 
     def add_element(self, element_type, element_class, element_id,
@@ -327,7 +373,7 @@ class FfffRomimage:
         """Display the field names and offsets of an FFFF romimage"""
         if self.ffff0 and self.ffff1:
             self.ffff0.write_map(wf, 0, "ffff[0]")
-            self.ffff1.write_map(wf, self.header_block_size(), "ffff[1]")
+            self.ffff1.write_map(wf, self.get_header_block_size(), "ffff[1]")
             if self.ffff0.same_as(self.ffff1):
                 # The FFFF headers are identical, just traverse one for
                 # the component TFTFs
