@@ -159,10 +159,14 @@ def validate_args(args, elements):
     # Sanity-check the command line args and return a "valid" flag
     success = True
 
+    # Valdate the header size
     if (args.header_size < FFFF_HEADER_SIZE_MIN) or \
        (args.header_size > FFFF_HEADER_SIZE_MAX):
         error("--header_size is out of range ({0:d}-{1:d})".
               format(FFFF_HEADER_SIZE_MIN, FFFF_HEADER_SIZE_MAX))
+        success = False
+    if (args.header_size % 4) != 0:
+        error("--header_size must be a multiple of 4")
         success = False
 
     if not args.out:

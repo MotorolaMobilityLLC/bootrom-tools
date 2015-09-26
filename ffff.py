@@ -38,14 +38,15 @@ from ffff_element import FFFF_HDR_VALID, \
     FFFF_HDR_OFF_FLASH_CAPACITY, FFFF_FLASH_IMAGE_NAME_LENGTH, \
     FFFF_ELEMENT_END_OF_ELEMENT_TABLE, FFFF_HEADER_COLLISION, \
     FFFF_HDR_ERASED, FFFF_RSVD_SIZE, FFFF_SENTINEL, \
-    FFFF_HDR_INVALID, FFFF_HDR_OFF_PADDING, FFFF_HDR_OFF_SENTINEL, \
+    FFFF_HDR_INVALID, FFFF_HDR_OFF_SENTINEL, \
     FFFF_HDR_OFF_TIMESTAMP, FFFF_HDR_OFF_ERASE_BLOCK_SIZE, \
     FFFF_HDR_OFF_HEADER_SIZE, FFFF_HDR_OFF_FLASH_IMAGE_LENGTH, \
     FFFF_HDR_OFF_HEADER_GENERATION_NUM, FFFF_HDR_OFF_RESERVED, \
     FFFF_ELT_OFF_TYPE, FFFF_ELT_OFF_CLASS, FFFF_ELT_OFF_ID, \
     FFFF_ELT_OFF_GENERATION, FFFF_ELT_OFF_LOCATION, \
-    FFFF_ELT_OFF_LENGTH, FFFF_RESERVED, FFFF_HDR_LEN_FIXED_PART, \
-    FFFF_HEADER_SIZE_MIN, FFFF_HEADER_SIZE_MAX, FFFF_HEADER_SIZE_DEFAULT
+    FFFF_ELT_OFF_LENGTH, FFFF_HDR_NUM_RESERVED, FFFF_HDR_LEN_FIXED_PART, \
+    FFFF_HEADER_SIZE_MIN, FFFF_HEADER_SIZE_MAX, FFFF_HEADER_SIZE_DEFAULT, \
+    FFFF_HDR_LEN_MIN_RESERVED
 import sys
 from util import error, is_power_of_2, next_boundary, is_constant_fill, \
     PROGRAM_ERRORS
@@ -91,9 +92,8 @@ class Ffff:
         self.erase_block_size = erase_block_size
         self.flash_image_length = image_length
         self.header_generation_number = header_generation_number
-        self.reserved = [0] * FFFF_RESERVED
+        self.reserved = [0] * FFFF_HDR_NUM_RESERVED
         self.elements = []
-        self.padding = ""
         self.tail_sentinel = ""
 
         # Private vars
@@ -134,21 +134,27 @@ class Ffff:
         which follow.
         """
         global FFFF_HDR_NUM_ELEMENTS, FFFF_HDR_LEN_ELEMENT_TBL, \
-            FFFF_HDR_LEN_PADDING, FFFF_HDR_OFF_PADDING, \
-            FFFF_HDR_OFF_TAIL_SENTINEL
+            FFFF_HDR_NUM_RESERVED, FFFF_HDR_LEN_RESERVED, \
+            FFFF_HDR_OFF_RESERVED, FFFF_HDR_OFF_TAIL_SENTINEL, \
+            FFFF_HDR_LEN_MIN_RESERVED
         # TFTF section table and derived lengths
         FFFF_HDR_NUM_ELEMENTS = \
-            ((self.header_size - FFFF_HDR_LEN_FIXED_PART) // FFFF_ELT_LENGTH)
+            ((self.header_size -
+             (FFFF_HDR_LEN_FIXED_PART + FFFF_HDR_LEN_MIN_RESERVED)) //
+             FFFF_ELT_LENGTH)
         FFFF_HDR_LEN_ELEMENT_TBL = (FFFF_HDR_NUM_ELEMENTS * FFFF_ELT_LENGTH)
-        FFFF_HDR_LEN_PADDING = (self.header_size -
+
+        FFFF_HDR_LEN_RESERVED = (self.header_size -
                                 (FFFF_HDR_LEN_FIXED_PART +
                                  FFFF_HDR_LEN_ELEMENT_TBL))
+        FFFF_HDR_NUM_RESERVED = FFFF_HDR_LEN_RESERVED / FFFF_RSVD_SIZE
+        self.reserved = [0] * FFFF_HDR_NUM_RESERVED
 
         # Offsets to fields following the section table
-        FFFF_HDR_OFF_PADDING = (FFFF_HDR_OFF_ELEMENT_TBL +
-                                FFFF_HDR_LEN_ELEMENT_TBL)
-        FFFF_HDR_OFF_TAIL_SENTINEL = (FFFF_HDR_OFF_PADDING +
-                                      FFFF_HDR_LEN_PADDING)
+        FFFF_HDR_OFF_ELEMENT_TBL = (FFFF_HDR_OFF_RESERVED +
+                                    FFFF_HDR_LEN_RESERVED)
+        FFFF_HDR_OFF_TAIL_SENTINEL = (FFFF_HDR_OFF_ELEMENT_TBL +
+                                      FFFF_HDR_LEN_ELEMENT_TBL)
 
     def get_header_block_size(self):
         return get_header_block_size(self.erase_block_size, self.header_size)
@@ -156,7 +162,7 @@ class Ffff:
     def unpack(self):
         """Unpack an FFFF header from a buffer"""
 
-        fmt_string = "<16s16s48sLLLLL" + "L" * FFFF_RESERVED
+        fmt_string = "<16s16s48sLLLLL" + "L" * FFFF_HDR_NUM_RESERVED
         ffff_hdr = unpack_from(fmt_string, self.ffff_buf,
                                self.header_offset)
         self.sentinel = ffff_hdr[0]
@@ -167,7 +173,7 @@ class Ffff:
         self.header_size = ffff_hdr[5]
         self.flash_image_length = ffff_hdr[6]
         self.header_generation_number = ffff_hdr[7]
-        for i in range(FFFF_RESERVED):
+        for i in range(FFFF_HDR_NUM_RESERVED):
             self.reserved[i] = ffff_hdr[8+i]
 
         # Now that we have parsed the header_size, recalculate the size of the
@@ -222,7 +228,7 @@ class Ffff:
                   self.header_size,
                   self.flash_image_length,
                   self.header_generation_number)
-        for i in range(FFFF_RESERVED):
+        for i in range(FFFF_HDR_NUM_RESERVED):
             pack_into("<L", self.ffff_buf,
                       self.header_offset + FFFF_HDR_OFF_RESERVED +
                       (FFFF_RSVD_SIZE * i),
@@ -496,7 +502,6 @@ class Ffff:
             self.flash_image_length == other.flash_image_length and \
             self.header_generation_number == \
             other.header_generation_number and \
-            self.padding == other.padding and \
             self.tail_sentinel == other.tail_sentinel
 
     def write_elements(self, header):
@@ -610,6 +615,8 @@ class Ffff:
         wf.write("{0:s}generation  {1:08x}\n".
                  format(prefix,
                         base_offset + FFFF_HDR_OFF_HEADER_GENERATION_NUM))
+
+        # Add the reserved table
         for i in range(len(self.reserved)):
             wf.write("{0:s}reserved[{1:d}]  {2:08x}\n".
                      format(prefix, i,
@@ -641,9 +648,7 @@ class Ffff:
                             element_offset + FFFF_ELT_OFF_GENERATION))
             element_offset += FFFF_ELT_LENGTH
 
-        # Add the padding and tail sentinel
-        wf.write("{0:s}padding  {1:08x}\n".
-                 format(prefix, base_offset + FFFF_HDR_OFF_PADDING))
+        # Add the tail sentinel
         wf.write("{0:s}tail_sentinel  {1:08x}\n".
                  format(prefix, base_offset + FFFF_HDR_OFF_TAIL_SENTINEL))
 

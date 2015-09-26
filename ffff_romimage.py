@@ -35,7 +35,8 @@ from ffff_element import FFFF_MAX_HEADER_BLOCK_OFFSET, FFFF_SENTINEL, \
     FFFF_MAX_HEADER_BLOCK_SIZE, FFFF_HDR_OFF_TAIL_SENTINEL, \
     FFFF_FILE_EXTENSION, FFFF_HDR_LENGTH, FFFF_HDR_VALID, \
     FFFF_HEADER_SIZE_MIN, FFFF_HEADER_SIZE_MAX, FFFF_HEADER_SIZE_DEFAULT, \
-    FFFF_HDR_LEN_FIXED_PART, FFFF_ELT_LENGTH, FFFF_HDR_OFF_ELEMENT_TBL
+    FFFF_HDR_LEN_FIXED_PART, FFFF_ELT_LENGTH, \
+    FFFF_RSVD_SIZE, FFFF_HDR_OFF_RESERVED
 from ffff import Ffff
 from util import is_power_of_2
 import io
@@ -214,21 +215,24 @@ class FfffRomimage:
         which follow.
         """
         global FFFF_HDR_NUM_ELEMENTS, FFFF_HDR_LEN_ELEMENT_TBL, \
-            FFFF_HDR_LEN_PADDING, FFFF_HDR_OFF_PADDING, \
-            FFFF_HDR_OFF_TAIL_SENTINEL
+            FFFF_HDR_NUM_RESERVED, FFFF_HDR_LEN_RESERVED, \
+            FFFF_HDR_OFF_RESERVED, FFFF_RSVD_SIZE, FFFF_HDR_OFF_TAIL_SENTINEL
         # TFTF section table and derived lengths
         FFFF_HDR_NUM_ELEMENTS = \
             ((self.header_size - FFFF_HDR_LEN_FIXED_PART) // FFFF_ELT_LENGTH)
         FFFF_HDR_LEN_ELEMENT_TBL = (FFFF_HDR_NUM_ELEMENTS * FFFF_ELT_LENGTH)
-        FFFF_HDR_LEN_PADDING = (self.header_size -
+
+        FFFF_HDR_LEN_RESERVED = (self.header_size -
                                 (FFFF_HDR_LEN_FIXED_PART +
                                  FFFF_HDR_LEN_ELEMENT_TBL))
+        FFFF_HDR_NUM_RESERVED = FFFF_HDR_LEN_RESERVED / FFFF_RSVD_SIZE
+        self.reserved = [0] * FFFF_HDR_NUM_RESERVED
 
         # Offsets to fields following the section table
-        FFFF_HDR_OFF_PADDING = (FFFF_HDR_OFF_ELEMENT_TBL +
-                                FFFF_HDR_LEN_ELEMENT_TBL)
-        FFFF_HDR_OFF_TAIL_SENTINEL = (FFFF_HDR_OFF_PADDING +
-                                      FFFF_HDR_LEN_PADDING)
+        FFFF_HDR_OFF_ELEMENT_TBL = (FFFF_HDR_OFF_RESERVED +
+                                    FFFF_HDR_LEN_RESERVED)
+        FFFF_HDR_OFF_TAIL_SENTINEL = (FFFF_HDR_OFF_ELEMENT_TBL +
+                                      FFFF_HDR_LEN_ELEMENT_TBL)
 
     def get_romimage_characteristics(self):
         # Extract the ROMimage size and characteritics from the first FFFF

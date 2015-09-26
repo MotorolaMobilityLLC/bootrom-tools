@@ -78,7 +78,7 @@ TFTF_HEADER_SIZE_DEFAULT = 512
 TFTF_SENTINEL = "TFTF"
 TFTF_TIMESTAMP_LENGTH = 16
 TFTF_FW_PKG_NAME_LENGTH = 48
-TFTF_RESERVED = 6       # Header words reserved for future use
+TFTF_HDR_NUM_RESERVED_MIN = 4
 TFTF_RSVD_SIZE = 4      # Size of each reserved item
 
 # TFTF section field lengths
@@ -116,7 +116,7 @@ TFTF_HDR_LEN_UNIPRO_MFGR_ID = 4
 TFTF_HDR_LEN_UNIPRO_PRODUCT_ID = 4
 TFTF_HDR_LEN_ARA_VENDOR_ID = 4
 TFTF_HDR_LEN_ARA_PRODUCT_ID = 4
-TFTF_HDR_LEN_RESERVED = (TFTF_RESERVED * TFTF_RSVD_SIZE)
+TFTF_HDR_LEN_MIN_RESERVED = (TFTF_HDR_NUM_RESERVED_MIN * TFTF_RSVD_SIZE)
 TFTF_HDR_LEN_FIXED_PART = (TFTF_HDR_LEN_SENTINEL +
                            TFTF_HDR_LEN_HEADER_SIZE +
                            TFTF_HDR_LEN_TIMESTAMP +
@@ -126,13 +126,16 @@ TFTF_HDR_LEN_FIXED_PART = (TFTF_HDR_LEN_SENTINEL +
                            TFTF_HDR_LEN_UNIPRO_MFGR_ID +
                            TFTF_HDR_LEN_UNIPRO_PRODUCT_ID +
                            TFTF_HDR_LEN_ARA_VENDOR_ID +
-                           TFTF_HDR_LEN_ARA_PRODUCT_ID +
-                           TFTF_HDR_LEN_RESERVED)
+                           TFTF_HDR_LEN_ARA_PRODUCT_ID)
 TFTF_HDR_NUM_SECTIONS = \
     ((TFTF_HEADER_SIZE_DEFAULT - TFTF_HDR_LEN_FIXED_PART) // TFTF_SECTION_LEN)
 TFTF_HDR_LEN_SECTION_TABLE = (TFTF_HDR_NUM_SECTIONS * TFTF_SECTION_LEN)
-TFTF_HDR_LEN_PADDING = (TFTF_HEADER_SIZE_DEFAULT -
-                        (TFTF_HDR_LEN_FIXED_PART + TFTF_HDR_LEN_SECTION_TABLE))
+# (The reserved array is made up of what's left over after creating the
+# section array.)
+TFTF_HDR_LEN_RESERVED = \
+    (TFTF_HEADER_SIZE_DEFAULT -
+     (TFTF_HDR_LEN_FIXED_PART + TFTF_HDR_LEN_SECTION_TABLE))
+TFTF_HDR_NUM_RESERVED = (TFTF_HDR_LEN_RESERVED / TFTF_RSVD_SIZE)
 
 # TFTF header field offsets
 TFTF_HDR_OFF_SENTINEL = 0
@@ -158,7 +161,6 @@ TFTF_HDR_OFF_RESERVED = (TFTF_HDR_OFF_ARA_PRODUCT_ID +
                          TFTF_HDR_LEN_ARA_PRODUCT_ID)
 TFTF_HDR_OFF_SECTIONS = (TFTF_HDR_OFF_RESERVED +
                          TFTF_HDR_LEN_RESERVED)
-TFTF_HDR_OFF_PADDING = (TFTF_HDR_OFF_SECTIONS + TFTF_HDR_LEN_SECTION_TABLE)
 
 
 # TFTF Signature Block layout
@@ -397,7 +399,7 @@ class Tftf:
         self.unipro_pid = 0
         self.ara_vid = 0
         self.ara_pid = 0
-        self.reserved = [0] * TFTF_RESERVED
+        self.reserved = [0] * TFTF_HDR_NUM_RESERVED
         self.sections = []
 
         if filename:
@@ -425,18 +427,27 @@ class Tftf:
         which follow.
         """
         global TFTF_HDR_NUM_SECTIONS, TFTF_HDR_LEN_SECTION_TABLE, \
-            TFTF_HDR_LEN_PADDING, TFTF_HDR_OFF_PADDING
+            TFTF_HDR_LEN_RESERVED, TFTF_HDR_OFF_RESERVED, \
+            TFTF_HDR_OFF_SECTIONS, TFTF_HDR_NUM_RESERVED
         # TFTF section table and derived lengths
         TFTF_HDR_NUM_SECTIONS = \
-            ((self.header_size - TFTF_HDR_LEN_FIXED_PART) // TFTF_SECTION_LEN)
+            ((self.header_size -
+             (TFTF_HDR_LEN_FIXED_PART + TFTF_HDR_LEN_MIN_RESERVED)) //
+             TFTF_SECTION_LEN)
         TFTF_HDR_LEN_SECTION_TABLE = (TFTF_HDR_NUM_SECTIONS * TFTF_SECTION_LEN)
-        TFTF_HDR_LEN_PADDING = \
+
+        # (The reserved array is made up of what's left over after creating the
+        # section array.)
+        TFTF_HDR_LEN_RESERVED = \
             self.header_size - \
             (TFTF_HDR_LEN_FIXED_PART + TFTF_HDR_LEN_SECTION_TABLE)
+        TFTF_HDR_NUM_RESERVED = TFTF_HDR_LEN_RESERVED / TFTF_RSVD_SIZE
+        self.reserved = [0] * TFTF_HDR_NUM_RESERVED
 
-        # Offsets to fields following the section table
-        TFTF_HDR_OFF_PADDING = (TFTF_HDR_OFF_SECTIONS +
-                                TFTF_HDR_LEN_SECTION_TABLE)
+        # Offsets to fields following the first variable-length table
+        # (Reserved)
+        TFTF_HDR_OFF_SECTIONS = (TFTF_HDR_OFF_RESERVED +
+                                 TFTF_HDR_LEN_RESERVED)
 
     def load_tftf_file(self, filename):
         """Try to import a TFTF header and/or file
@@ -484,7 +495,7 @@ class Tftf:
 
     def unpack(self):
         # Unpack a TFTF header from a buffer
-        fmt_string = "<4sL16s48sLLLLLL" + "L" * TFTF_RESERVED
+        fmt_string = "<4sL16s48sLLLLLL" + "L" * TFTF_HDR_NUM_RESERVED
         tftf_hdr = unpack_from(fmt_string, self.tftf_buf)
         self.sentinel = tftf_hdr[0]
         self.header_size = tftf_hdr[1]
@@ -496,13 +507,14 @@ class Tftf:
         self.unipro_pid = tftf_hdr[7]
         self.ara_vid = tftf_hdr[8]
         self.ara_pid = tftf_hdr[9]
-        for i in range(TFTF_RESERVED):
-            self.reserved[i] = tftf_hdr[10+i]
 
         # Since the imported header_size may be different from our 512-byte
-        # default, we need to recalculate the size of the section table and
-        # offsets to all trailing fields
+        # default, we need to recalculate the size of the reserved and
+        # section tables and their offsets
         self.recalculate_header_offsets()
+
+        for i in range(TFTF_HDR_NUM_RESERVED):
+            self.reserved[i] = tftf_hdr[10+i]
 
         # Purge (the EOT from) the list because we're populating the entire
         # list from the file
@@ -547,7 +559,7 @@ class Tftf:
                   self.unipro_pid,
                   self.ara_vid,
                   self.ara_pid)
-        for i in range(TFTF_RESERVED):
+        for i in range(TFTF_HDR_NUM_RESERVED):
             pack_into("<L", self.tftf_buf,
                       TFTF_HDR_OFF_RESERVED + (TFTF_RSVD_SIZE * i),
                       self.reserved[i])
@@ -762,7 +774,8 @@ class Tftf:
         print("{0:s}  Ara product ID:    0x{1:08x}".format(
             indent, self.ara_pid))
         for i, rsvd in enumerate(self.reserved):
-            print("  Reserved [{0:d}]:      0x{1:08x}".format(i, rsvd))
+            print("{0:s}  Reserved [{1:d}]:      0x{2:08x}".
+                  format(indent, i, rsvd))
 
         # 2. Dump the table of section headers
         print("{0:s}  Section Table (all values in hex):".format(indent))
@@ -939,10 +952,6 @@ class Tftf:
                      format(prefix, index,
                             section_offset + TFTF_SECTION_OFF_EXPANDED_LENGTH))
             section_offset += TFTF_SECTION_LEN
-
-        # Dump the padding (the remainder of the TFTF header
-        wf.write("{0:s}padding  {1:08x}\n".
-                 format(prefix, base_offset + TFTF_HDR_OFF_PADDING))
 
         # Dump the section starts
         base_offset += self.header_size

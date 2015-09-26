@@ -133,6 +133,17 @@ def validate_args(args, sections):
     if not sections:
         error("You need at least one --code, --data, --manifest or --elf!")
         success = False
+
+    # Valdate the header size
+    if (args.header_size < TFTF_HEADER_SIZE_MIN) or \
+       (args.header_size > TFTF_HEADER_SIZE_MAX):
+        error("--header_size is out of range ({0:d}-{1:d})".
+              format(TFTF_HEADER_SIZE_MIN, TFTF_HEADER_SIZE_MAX))
+        success = False
+    if (args.header_size % 4) != 0:
+        error("--header_size must be a multiple of 4")
+        success = False
+
     if len(sections) > TFTF_HDR_NUM_SECTIONS:
         error("Too many sections -", TFTF_HDR_NUM_SECTIONS, "max.")
         success = False
@@ -154,11 +165,7 @@ def validate_args(args, sections):
     if args.ara_stage < 1 or args.ara_stage > 3:
         error("--ara-stage is out of range")
         success = False
-    if (args.header_size < TFTF_HEADER_SIZE_MIN) or \
-       (args.header_size > TFTF_HEADER_SIZE_MAX):
-        error("--header_size is out of range ({0:d}-{1:d})".
-              format(TFTF_HEADER_SIZE_MIN, TFTF_HEADER_SIZE_MAX))
-        success = False
+
     if not args.out:
         args.out = 'ara:{:08x}:{:08x}:{:08x}:{:08x}:{:02x}.tftf'.format(
                    args.unipro_mfg, args.unipro_pid, args.ara_vid,
