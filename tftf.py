@@ -150,8 +150,8 @@ TFTF_HDR_OFF_ARA_PRODUCT_ID = (TFTF_HDR_OFF_ARA_VENDOR_ID +
                                TFTF_HDR_LEN_ARA_VENDOR_ID)
 TFTF_HDR_OFF_RESERVED = (TFTF_HDR_OFF_ARA_PRODUCT_ID +
                          TFTF_HDR_LEN_ARA_PRODUCT_ID)
-TFTF_HDR_OFF_SECTIONS = (TFTF_HDR_OFF_ARA_PRODUCT_ID +
-                         TFTF_HDR_LEN_ARA_PRODUCT_ID)
+TFTF_HDR_OFF_SECTIONS = (TFTF_HDR_OFF_RESERVED +
+                         TFTF_HDR_LEN_RESERVED)
 TFTF_HDR_OFF_PADDING = (TFTF_HDR_OFF_SECTIONS + TFTF_HDR_LEN_SECTION_TABLE)
 
 
@@ -254,7 +254,6 @@ class TftfSection:
     def unpack(self, section_buf, section_offset):
         # Unpack a section header from a TFTF header buffer, and return
         # a flag indicating if the section was a section-end
-
         section_hdr = unpack_from("<LLLLL", section_buf, section_offset)
         type_class = section_hdr[0]
         self.section_type = type_class & 0x000000ff
@@ -712,7 +711,7 @@ class Tftf:
         print("{0:s}  Ara product ID:    0x{1:08x}".format(
             indent, self.ara_pid))
         for i, rsvd in enumerate(self.reserved):
-            print("  Reserved [{0:d}]:      0x{1:08x}".format(i, rsvd))
+            print("  Reserved [{0:d}]:        0x{1:08x}".format(i, rsvd))
 
         # 2. Dump the table of section headers
         print("{0:s}  Section Table (all values in hex):".format(indent))

@@ -147,11 +147,10 @@ class Ffff:
                                   self.flash_capacity,
                                   self.erase_block_size,
                                   0, 0, 0, 0, 0, 0)
-            if not element.unpack(self.ffff_buf, offset):
-                self.elements.append(element)
-                offset += FFFF_ELT_LENGTH
-            else:
-                # Stop on the first unused element
+            eot = element.unpack(self.ffff_buf, offset)
+            self.elements.append(element)
+            offset += FFFF_ELT_LENGTH
+            if eot:
                 print("unpack done")
                 break
         self.validate_ffff_header()
@@ -353,13 +352,14 @@ class Ffff:
                 return self.header_validity
 
         # Verify that the unused portions of the header are zeroed, per spec.
+        print("Num elements:", len(self.elements)) #*****
         span_start = self.header_offset + FFFF_HDR_OFF_ELEMENT_TBL + \
             len(self.elements) * FFFF_ELT_LENGTH
         span_end = self.header_offset + FFFF_HDR_OFF_TAIL_SENTINEL - \
             span_start
         if not is_constant_fill(self.ffff_buf[span_start:span_end], 0):
-            error("Unused portions of header are not zeroed: " +
-                  str(span_start) + " to " + str(span_end))
+            error("Unused portions of FFFF header are non-zero: " \
+                   "(0x{0:x}-0x{1:x})".format(span_start, span_end))
             self.header_validity = FFFF_HDR_INVALID
             return self.header_validity
 
