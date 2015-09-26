@@ -198,7 +198,7 @@ def main():
     # Walk the list of TFTF files
     for f in args.files:
         signature_block = base_signature_block
-        tftf = Tftf(f)
+        tftf = Tftf(0, f)
 
         # Extract the signable blob from the TFTF and sign it
         signable_blob = get_signable_blob(tftf)
@@ -209,8 +209,10 @@ def main():
         # Append the signature block to the TFTF
         signature_block = SignatureBlock(None, signature_type, key_name,
                                          signature)
-        if not tftf.add_section(TFTF_SECTION_TYPE_SIGNATURE,
-                                signature_block.pack()):
+        if not tftf.add_section(TFTF_SECTION_TYPE_SIGNATURE,  # type
+                                0,                            # class
+                                0,                            # id
+                                signature_block.pack()):      # data
             sys.exit(PROGRAM_ERRORS)
 
         tftf.post_process()
