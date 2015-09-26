@@ -53,13 +53,20 @@ from util import error, is_power_of_2, next_boundary, is_constant_fill, \
 
 
 def get_header_block_size(erase_block_size, header_size):
-    # Determine the size of the FFFF header block
-    #
-    # The "header block size" is defined as some power-of-2 * the
-    # erase-block-size
+    """ Determine the size of the FFFF header block
+
+    The "header block size" is defined as the smallest (power-of-2 *
+    erase-block-size) that will contain the FFFF header.
+
+    This is an externally-callable function because ffff_romimage.py
+    requires this function and it makes sense to have a single copy
+
+    erase_block_size: The size in bytes of the Flash erase block
+    header_size: The size in bytes of the FFFF header
+    """
     size = erase_block_size
     while size < FFFF_MAX_HEADER_BLOCK_SIZE:
-        if size > header_size:
+        if size >= header_size:
             break
         else:
             size <<= 1
@@ -83,7 +90,7 @@ class Ffff:
     def __init__(self, buf, offset, flash_image_name, flash_capacity,
                  erase_block_size, image_length, header_generation_number,
                  header_size):
-        """FFFF constructor"""
+        """ FFFF constructor """
         # FFFF header fields
         self.sentinel = ""
         self.timestamp = ""
@@ -97,15 +104,15 @@ class Ffff:
         self.tail_sentinel = ""
 
         # Private vars
+        self.header_offset = offset
         if (header_size == 0):
-            # We'll fill it in from parsing the file
+            # We'll fill it in later from parsing the file
             self.header_size = FFFF_HEADER_SIZE_DEFAULT
         else:
             self.header_size = header_size
         self.recalculate_header_offsets()
 
         self.ffff_buf = buf
-        self.header_offset = offset
         self.collisions = []
         self.collisions_found = False
         self.duplicates = []
@@ -208,8 +215,11 @@ class Ffff:
         self.validate_ffff_header()
 
     def pack(self):
-        # Pack the FFFF header members into a FFFF header buffer, prior
-        # to writing the buffer out to a file.
+        """ Pack the FFFF header members into a FFFF header buffer
+
+        Pack the FFFF header members into a FFFF header buffer, prior
+        to writing the buffer out to a file.
+        """
 
         # Populate the fixed part of the FFFF header.
         # (Note that we need to break up the packing because the "s" format
@@ -233,14 +243,16 @@ class Ffff:
                       self.header_offset + FFFF_HDR_OFF_RESERVED +
                       (FFFF_RSVD_SIZE * i),
                       self.reserved[i])
-        pack_into("<16s", self.ffff_buf,
-                  self.header_offset + FFFF_HDR_OFF_TAIL_SENTINEL,
-                  self.tail_sentinel)
 
         # Pack the element headers into the FFFF header buffer
         offset = self.header_offset + FFFF_HDR_OFF_ELEMENT_TBL
         for element in self.elements:
             offset = element.pack(self.ffff_buf, offset)
+
+        # Finally, add the tail sentinel
+        pack_into("<16s", self.ffff_buf,
+                  self.header_offset + FFFF_HDR_OFF_TAIL_SENTINEL,
+                  self.tail_sentinel)
 
     def add_element(self, element_type, element_class, element_id,
                     element_length, element_location, element_generation,

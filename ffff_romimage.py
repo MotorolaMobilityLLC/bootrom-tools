@@ -32,12 +32,12 @@ from __future__ import print_function
 from string import rfind
 from struct import unpack_from
 from ffff_element import FFFF_MAX_HEADER_BLOCK_OFFSET, FFFF_SENTINEL, \
-    FFFF_MAX_HEADER_BLOCK_SIZE, FFFF_HDR_OFF_TAIL_SENTINEL, \
-    FFFF_FILE_EXTENSION, FFFF_HDR_LENGTH, FFFF_HDR_VALID, \
+    FFFF_HDR_OFF_TAIL_SENTINEL, \
+    FFFF_FILE_EXTENSION, FFFF_HDR_VALID, \
     FFFF_HEADER_SIZE_MIN, FFFF_HEADER_SIZE_MAX, FFFF_HEADER_SIZE_DEFAULT, \
     FFFF_HDR_LEN_FIXED_PART, FFFF_ELT_LENGTH, \
     FFFF_RSVD_SIZE, FFFF_HDR_OFF_RESERVED
-from ffff import Ffff
+from ffff import Ffff, get_header_block_size
 from util import is_power_of_2
 import io
 
@@ -203,9 +203,7 @@ class FfffRomimage:
     def get_header_block_size(self):
         # Determine the size of the FFFF header block, defined as a
         # power-of-2 * the erase-block-size
-        for size in range(self.erase_block_size, FFFF_MAX_HEADER_BLOCK_SIZE):
-            if size > FFFF_HDR_LENGTH:
-                return size
+        return get_header_block_size(self.erase_block_size, self.header_size)
 
     def recalculate_header_offsets(self):
         """ Recalculate element table size and offsets from header_size

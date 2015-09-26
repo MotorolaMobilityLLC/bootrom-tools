@@ -181,7 +181,7 @@ def main():
 
     Usage: create-tftf --start <num> --out <file> {--header-size <num>} \
            {--name <string>} {--unipro-mfg} {--unipro-pid} \
-           {--ara-vid} {--ara-pid} {--ara-stage} \
+           {--ara-vid} {--ara-pid} {--ara-stage} {--elf <file>} \
            {-v | --verbose} {--map} {--header-size}\
            [<section_type> <file> {--load <num>} --class <num>} --id <num>}]...
     Where:
@@ -203,6 +203,8 @@ def main():
             ARA product ID
         --ara-stage
             ARA boot stage
+        --elf
+            The name of an input ELF image file
         -v | --verbose
             Display the TFTF header and a synopsis of each TFTF section
         --map

@@ -242,7 +242,11 @@ class TftfSection:
         self.section_class = section_class
         self.section_id = section_id
         self.section_length = section_length
-        self.load_address = load_address
+        if (section_type == TFTF_SECTION_TYPE_SIGNATURE) or \
+           (section_type == TFTF_SECTION_TYPE_CERTIFICATE):
+            self.load_address = 0xffffffff
+        else:
+            self.load_address = load_address
         self.expanded_length = extended_length
         self.filename = filename
 
