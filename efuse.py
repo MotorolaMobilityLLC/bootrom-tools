@@ -54,7 +54,8 @@ efuses = {
     "CMS5": 0x00000000,
     "CMS6": 0x00000000,
     "SCR": 0x00000000,
-    "JTAG_CONTROL": 0x00000000}
+    "JTAG_CONTROL": 0x00000000,
+    "ECCERROR": 0x00000000}
 
 
 def set_efuse(reg, value):

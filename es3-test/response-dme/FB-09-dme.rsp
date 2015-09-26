@@ -1,12 +1,3 @@
-Hello world from s1fw
-Reset all cports.
-Unipro enabled!
-efuse_init: OK
-Boot from SPIROM
-FFFF hdr len 00001000
-FFFF hdr len 00001000
-SPI Untrusted: (04000000)
-ID=6101, WrVal=04000000
 ID=4020, WrVal=00000000
 ID=4028, WrVal=00000000
 ID=4029, WrVal=00000000
@@ -23,7 +14,7 @@ ID=4020, WrVal=00000000
 ID=4028, WrVal=00000000
 ID=4029, WrVal=00000000
 ID=402a, WrVal=00000000
-Reset all cports.
-
-Hello world from s2fw
+ID=6101, WrVal=01000000
+ID=6100, WrVal=01260001
+ID=6101, WrVal=09000043
 

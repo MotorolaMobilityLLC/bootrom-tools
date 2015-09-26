@@ -1,0 +1,17 @@
+Hello world from s1fw
+Reset all cports.
+Unipro enabled!
+ID=6101, WrVal=01000000
+ID=6100, WrVal=01260001
+fuse_init: OK
+Boot from SPIROM
+L1 FFFF err: 00000041
+Spi boot failed (09000041), Boot over UniPro (09000041)
+Module ready advertised.
+Ready-poked; download-ready
+Beginning Greybus FW download.
+Finished Greybus FW download.
+UP Trusted: (0b000041)
+Reset all cports.
+
+Hello world from s2fw

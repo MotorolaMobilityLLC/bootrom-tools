@@ -42,6 +42,7 @@ BinDir=~/work/bootrom/binary
 KeyDir=~/bin
 AssyDir=~/bootrom-tools/es3-test
 DropDir=~/es3-test
+Zip=false
 
 #-----
 # Process any args
@@ -53,8 +54,12 @@ for arg in "$@" ; do    # arg will be each positional parameter
         CONFIG_CHIP="es3tsb"
     elif [[ ${arg} == "-fpgatsb" ]]; then # select target configuration
         CONFIG_CHIP="fpgatsb"
+    elif [[ ${arg} == "-prod" ]]; then    # Production version
+        Production=${arg}
     elif [[ ${arg} == "-v" ]]; then       # TFTF verbose mode
         Verbose=${arg}
+    elif [[ ${arg} == "-zip" ]]; then   # suppress zip file generation
+        Zip=true
     else
         echo "Makeall: unknown arg $arg"
         exit 1
@@ -76,9 +81,17 @@ if [ ! -d $AssyDir/ffff ]
 then
     mkdir $AssyDir/ffff
 fi
+if [ ! -d $AssyDir/ctrl-files ]
+then
+    mkdir $AssyDir/ctrl-files
+fi
 if [ ! -d $AssyDir/response-files ]
 then
     mkdir $AssyDir/response-files
+fi
+if [ ! -d $AssyDir/response-dme ]
+then
+    mkdir $AssyDir/response-dme
 fi
 if [ ! -d $AssyDir/s1fw ]
 then
@@ -89,16 +102,16 @@ fi
 
 pushd $BuildRoot
 
-# GBFW server build
+# GBBOOT server build
 echo "--"
-echo "Building the GBFW (GBBOOT) server"
+echo "Building the GBBOOT server"
 echo "--"
 makeserver
 if [[ $? == 0 ]]; then
-    cp $BuildDir/bootrom-gbfw.bin $AssyDir/s1fw
-    cp $BuildDir/bootrom-gbfw.hex $AssyDir/s1fw
+    cp $BuildDir/gbboot_server.bin $AssyDir/s1fw
+    cp $BuildDir/gbboot_server.hex $AssyDir/s1fw
 else
-    echo "Problems building GBFW server"
+    echo "Problems building GBBoot server"
     popd
     exit 1
 fi
@@ -107,7 +120,7 @@ fi
 echo "--"
 echo "Building the Untrusted (non-signed) image"
 echo "--"
-make3 -$CONFIG_CHIP $Verbose
+make3 -$CONFIG_CHIP $Verbose $Production
 if [[ $? == 0 ]]; then
     cp $BuildDir/bootrom.bin $AssyDir/s1fw
     cp $BuildDir/bootrom.hex $AssyDir/s1fw
@@ -123,7 +136,7 @@ fi
 echo "--"
 echo "Building the Trusted (signed) image"
 echo "--"
-make3 -${CONFIG_CHIP} -sign $Verbose
+make3 -${CONFIG_CHIP} -sign $Verbose $Production
 if [[ $? == 0 ]]; then
     cp $BinDir/ffff-s2s3.bin $AssyDir/ffff
     cp $BinDir/ffff-s2s3.map $AssyDir/ffff
@@ -132,17 +145,6 @@ else
     popd
     exit 1
 fi
-
-## NoBOU build
-#make3 -${CONFIG_CHIP} -nobou $Verbose
-#if [[ $? == 0 ]]; then
-#    cp $BuildDir/bootrom-nb.bin $AssyDir/s1fw
-#    cp $BuildDir/bootrom-nb.hex $AssyDir/s1fw
-#else
-#    echo "Problems building no-BOU bootloader"
-#    popd
-#    exit 1
-#fi
 
 
 # (Re)create the drop folder
@@ -166,9 +168,17 @@ if [ ! -d $DropDir/ffff ]
 then
     mkdir $DropDir/ffff
 fi
+if [ ! -d $DropDir/ctrl-files ]
+then
+    mkdir $DropDir/ctrl-files
+fi
 if [ ! -d $DropDir/response-files ]
 then
     mkdir $DropDir/response-files
+fi
+if [ ! -d $DropDir/response-dme ]
+then
+    mkdir $DropDir/response-dme
 fi
 if [ ! -d $DropDir/s1fw ]
 then
@@ -178,7 +188,9 @@ fi
 # Populate the drop folder
 cp $AssyDir/efuse/* $DropDir/efuse
 cp $AssyDir/ffff/* $DropDir/ffff
-cp $AssyDir/response-files/* $DropDir/response-files
+cp $AssyDir/ctrl-files/*.ctrl $DropDir/ctrl-files
+cp $AssyDir/response-files/*.rsp $DropDir/response-files
+cp $AssyDir/response-dme/*.rsp $DropDir/response-dme
 cp $AssyDir/s1fw/* $DropDir/s1fw
 
 
@@ -220,11 +232,18 @@ done
 popd
 
 
-# Zip it all up
-echo "Generating drop..."
-Archive="es3-test_`date +%Y%m%d.%H%M.%Z`.tar.gz"
-tar -zcvf ~/$Archive $DropDir
-echo "Dropped to ~/$Archive"
+if $Zip; then
+    # Zip it all up
+    echo "Generating drop..."
+    if [[ "${Production}" == "-prod" ]]; then
+        Archive="`date +%Y%m%d-%H%M-%Z`.es3-test-prod.tar.gz"
+    else
+        Archive="`date +%Y%m%d-%H%M-%Z`.es3-test.tar.gz"
+    fi
+    tar -zcvf ~/$Archive $DropDir
+    echo "Dropped to ~/$Archive"
+fi
 
 # Done
 popd
+

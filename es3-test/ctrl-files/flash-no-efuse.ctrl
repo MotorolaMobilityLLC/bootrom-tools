@@ -1,0 +1,14 @@
+# Test Controller setup for boot-from-flash tests without uninitialized e-fuses
+#
+Initial Conditions:
+  SPIBOOT_N:		0	# Indicates SPI flash should be used
+  e-Fuse preload:	No	# Load from the E-fuse data file
+  VDDSDIO:		3.3v	# Supply SDIO power at startup
+  Boot Bridge:		Yes	# Release Boot Bridge from reset at atartup
+  Server Release:	No	# Release Serever (other) Bridge from reset at atartup
+  MPHY Connection:	Off	# No UniPro link active
+
+Operations:
+  Power ON Boot Bridge
+  Release RESET for Boot Bridge
+  Wait for Handshake at end of test

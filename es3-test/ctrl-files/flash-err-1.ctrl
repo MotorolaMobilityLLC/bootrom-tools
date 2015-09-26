@@ -1,0 +1,18 @@
+# Test Controller setup for boot-from-flash tests without fallback,
+# but with the flash memory disabled to force an error.
+#
+Initial Conditions:
+  SPIBOOT_N:		0	# Indicates SPI flash should be used
+  e-Fuse preload:	Yes	# Load from the E-fuse data file
+  VDDSDIO:		3.3v	# Supply SDIO power at startup
+  Boot Bridge:		Yes	# Release Boot Bridge from reset at atartup
+  Server Release:	No	# Release Serever (other) Bridge from reset at atartup
+  MPHY Connection:	Off	# No UniPro link active
+
+Special:
+  Do not supply power to SPI flash chip
+
+Operations:
+  Power ON Boot Bridge
+  Release RESET for Boot Bridge
+  Wait for Handshake at end of test

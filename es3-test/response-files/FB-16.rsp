@@ -1,0 +1,8 @@
+Hello world from s1fw
+Reset all cports.
+Unipro enabled!
+efuse_init: OK
+Boot from SPIROM
+L1 TFTF err: 00000025
+Spi boot failed (09000025), Boot over UniPro (09000025)
+

@@ -1,0 +1,7 @@
+Hello world from s1fw
+Reset all cports.
+Unipro enabled!
+efuse_init: Invalid Ara VID: deadbeef
+L1 error: 00000011
+Boot failed (81000011) halt
+

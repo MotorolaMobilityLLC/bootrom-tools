@@ -1,0 +1,18 @@
+# Test Controller setup for a fallback boot over UniPro, after an error is detected 
+# in flash contents
+#
+Initial Conditions:
+  SPIBOOT_N:		0	# Indicates SPI flash should be used
+  e-Fuse preload:	Yes	# Load from the E-fuse data file
+  VDDSDIO:		3.3v	# No STIO interface power at startup
+  Boot Bridge:		Yes	# Release Boot Bridge from reset at atartup
+  Server Release:	Yes	# Release Serever (other) Bridge from reset at atartup
+  MPHY Connection:	2-lane	# No UniPro link active
+
+Operations:
+  Power ON Server Bridge
+  Release RESET on Server Bridge
+  Wait the UniPro link up
+  Power ON Boot Bridge
+  Release RESET for Boot Bridge
+  Wait for Handshake at end of test

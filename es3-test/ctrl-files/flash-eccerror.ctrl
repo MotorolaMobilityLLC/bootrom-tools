@@ -1,0 +1,19 @@
+# Test Controller setup for boot-from-flash tests with an e-fuse ECC error
+# This is required only for the Toshiba simulation environment, the HAPS-62
+# nvironment can take that value from the e-fuse file.
+#
+Initial Conditions:
+  SPIBOOT_N:		0	# Indicates SPI flash should be used
+  e-Fuse preload:	Yes	# Load from the E-fuse data file
+  VDDSDIO:		3.3v	# Supply SDIO power at startup
+  Boot Bridge:		Yes	# Release Boot Bridge from reset at atartup
+  Server Release:	No	# Release Serever (other) Bridge from reset at atartup
+  MPHY Connection:	Off	# No UniPro link active
+
+Special:
+  Set ECCERROR in e-fuse controller
+
+Operations:
+  Power ON Boot Bridge
+  Release RESET for Boot Bridge
+  Wait for Handshake at end of test

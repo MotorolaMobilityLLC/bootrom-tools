@@ -27,7 +27,7 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 #------------------------------------------------------------------------------
-# Make all 3 images, their TFTF files, and  FFFF file, and the GBFW server.
+# Make all 3 images, their TFTF files, and  FFFF file, and the GBBOOT server.
 #
 # Usage:
 #    make3 {{-sim} | [{-sim1} {-sim2} {-sim3}]} \
@@ -35,15 +35,19 @@
 #          {-es2tsb | -es3tsb | -fpgatsb } \
 #          {-v}
 #
-#    -sim                Enable _SIMULATION mode for all 3 firmware levels
-#    -sim1, -sim2, -sim3 Enable _SIMULATION mode for specific firmware levels
-#    -sign               Sign both level 2 & 3 firmware
-#    -s2fw               Sign the level2 firmware
-#    -s3fw               Sign the level3 firmware
-#    -nobou              Suppress Boot-Over-Unipro
+#    -prod     Enable _SIMULATION mode for all 3 firmware levels
+#    -prod, -prod2, -prod3
+#              Enable _PRODUCTION mode for specific firmware levels
+#    -sim      Enable _SIMULATION mode for all 3 firmware levels
+#    -sim1, -sim2, -sim3
+#              Enable _SIMULATION mode for specific firmware levels
+#    -sign     Sign both level 2 & 3 firmware
+#    -s2fw     Sign the level2 firmware
+#    -s3fw     Sign the level3 firmware
+#    -nobou    Suppress Boot-Over-Unipro
 #    -es2tsb, -es3tsb, -fpgatsb
-#                        Select the build target
-#    -v                  Verbose mode on TFTF creation
+#              Select the build target
+#    -v        Verbose mode on TFTF creation
 #------------------------------------------------------------------------------
 BuildRoot=~/work/bootrom
 BuildDir=~/work/bootrom/build
@@ -53,6 +57,9 @@ KeyDir=~/bin
 #-----
 # Process any args
 #-----
+Prod1=false
+Prod2=false
+Prod3=false
 Sim1=false
 Sim2=false
 Sim3=false
@@ -60,7 +67,6 @@ Sign2FW=false
 Sign3FW=false
 NoBou=false
 for arg in "$@" ; do    # arg will be each positional parameter
-    echo "make3 ${arg}"
     if [[ ${arg} == "-sign" ]]; then     # Sign the 2nd level Firmware?
         Sign2FW=true
         Sign3FW=true
@@ -78,10 +84,20 @@ for arg in "$@" ; do    # arg will be each positional parameter
         Sim2=true
     elif [[ ${arg} == "-sim3" ]]; then    # Compile 3rdFW for Toshba Simulation
         Sim3=true
-    elif [[ ${arg} == "-nobou" ]]; then   # Suppress Boot-Over-Unipro (BOU)
-        NoBou=true
-        NoBouPreamble="_NOBOU=1"
-        NoBouSuffix="nb"
+    elif [[ ${arg} == "-sim" ]]; then    # Compile all levels for Toshba Simulation
+        Sim1=true
+        Sim2=true
+        Sim3=true
+    elif [[ ${arg} == "-prod1" ]]; then    # Compile 1stFW for Toshba Simulation
+        Prod1=true
+    elif [[ ${arg} == "-prod2" ]]; then    # Compile 2ndFW for Toshba Simulation
+        Prod2=true
+    elif [[ ${arg} == "-prod3" ]]; then    # Compile 3rdFW for Toshba Simulation
+        Prod3=true
+    elif [[ ${arg} == "-prod" ]]; then    # Compile all levels for Toshba Simulation
+        Prod1=true
+        Prod2=true
+        Prod3=true
     elif [[ ${arg} == "-es2tsb" ]]; then  # select target configuration
         CONFIG_CHIP="es2tsb"
     elif [[ ${arg} == "-es3tsb" ]]; then  # select target configuration
@@ -100,6 +116,7 @@ if [ ! $CONFIG_CHIP ]; then
     CONFIG_CHIP=$DEFAULT_CHIP_CONFIG
 fi
 
+
 if $Sign2FW; then
     Sign2Suffix="s2"
 fi
@@ -108,12 +125,22 @@ if $Sign3FW; then
 fi
 
 
-# Come up with the root name of the FFFF file, amended with any signage
-if $Sign2FW || $Sign3FW ; then
-    FfffSuffix="-$Sign2Suffix$Sign3Suffix"
-else
-    FfffSuffix=""
+if $Prod2; then
+    Prod2Suffix="p2"
 fi
+if $Prod3; then
+    Prod3Suffix="p3"
+fi
+
+
+# Come up with the root name of the FFFF file, amended with any signage
+FfffSuffix=""
+if $Sign2FW || $Sign3FW ; then
+    FfffSuffix=$FfffSuffix"-$Sign2Suffix$Sign3Suffix"
+fi
+#if $Prod2 || $Prod3 ; then
+#    FfffSuffix=$FfffSuffix"-$Prod2Suffix$Prod3Suffix"
+#fi
 FfffName="ffff$FfffSuffix"
 
 
@@ -138,8 +165,14 @@ echo "Make 3rd stage..."
 make clean
 if $Sim3; then
     _SIMULATION=1 make third_stage
+    if $Prod3; then
+        _PRODUCTION=1 _SIMULATION=1 make third_stage
+    fi
 else
     make third_stage
+    if $Prod3; then
+        _PRODUCTION=1 make third_stage
+    fi
 fi
 if [[ $? == 0 ]]; then
     # s3fw tftf
@@ -167,8 +200,14 @@ echo "Make 2nd stage..."
 make clean
 if $Sim2; then
     _SIMULATION=1 make second_stage
+    if $Prod2; then
+        _PRODUCTION=1 _SIMULATION=1 make second_stage
+    fi
 else
     make second_stage
+    if $Prod2; then
+        _PRODUCTION=1 _make second_stage
+    fi
 fi
 if [[ $? == 0 ]]; then
     # 2ndFW tftf
@@ -196,23 +235,17 @@ fi
 echo "Make 1st stage (BootRom)..."
 make clean
 if $Sim1; then
-    if $NoBou; then
-        _NOBOU=1 _SIMULATION=1 make
+    if $Prod1; then
+        _PRODUCTION=1 _SIMULATION=1 make
     else
         _SIMULATION=1 make
     fi
 else
-    if $NoBou; then
-       _NOBOU=1 make
+    if $Prod1; then
+       _PRODUCTION=1 make
     else
         make
     fi
-fi
-if $NoBou ; then
-    pushd $BuildDir
-    mv bootrom.bin "bootrom-$NoBouSuffix.bin"
-    mv bootrom.hex "bootrom-$NoBouSuffix.hex"
-    popd
 fi
 if [[ $? != 0 ]]; then
     echo "Problems creating s1fw"
@@ -229,7 +262,7 @@ fi
 echo "Make the FFFF..."
 create-ffff \
   --s2f $BinDir/second.bin --egen 1 --eloc 0x2000 \
-  --s3f $BinDir/third.bin --egen 1 --eloc 0x5000 --name Firmware \
+  --s3f $BinDir/third.bin --egen 1 --eloc 0x6000 --name Firmware \
   --out $BinDir/$FfffName.bin --flash-capacity 0x40000 --erase-size 0x800 \
   --image-length 0x8000 --generation 1 --map $Verbose
 if [[ $? != 0 ]]; then

@@ -1,0 +1,8 @@
+Hello world from s1fw
+Reset all cports.
+Unipro enabled!
+efuse_init: OK
+Boot from SPIROM
+L1 TFTF err: 0000002b
+Spi boot failed (0900002b), Boot over UniPro (0900002b)
+

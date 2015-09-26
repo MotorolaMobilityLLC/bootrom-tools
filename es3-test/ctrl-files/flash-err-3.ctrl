@@ -1,0 +1,28 @@
+# Test Controller setup for boot-from-flash tests without fallback, and with
+# a flash error induced in the process of reading the TFTF image (so, just a 
+# longer delay than flash-err-2.ctrl)#
+#
+# The 10 ms delay is a placeholder ONLY.
+# This value needs to be apropriately tuned.
+#
+# It is based on a calculation toat 10 ms is at most 30KB of flash reading 
+# (at 3 MB/sec), so 4KB for each # FFFF header, 1KB for the TFTF header, 
+# and 23KB of TFTF data would require at lease 30 ms of transfer time, 
+# likely more, so a 10 ms delay should land rigt in the middle of the 
+# TFTF read.
+#
+$ This calculation would be different if the TFTF were signed.
+#
+Initial Conditions:
+  SPIBOOT_N:		0	# Indicates SPI flash should be used
+  e-Fuse preload:	Yes	# Load from the E-fuse data file
+  VDDSDIO:		3.3v	# Supply SDIO power at startup
+  Boot Bridge:		Yes	# Release Boot Bridge from reset at atartup
+  Server Release:	No	# Release Serever (other) Bridge from reset at atartup
+  MPHY Connection:	Off	# No UniPro link active
+
+Operations:
+  Power ON Boot Bridge
+  Release RESET for Boot Bridge
+  Delay 10 ms and turn off SPI flash power
+  Wait for Handshake at end of test
