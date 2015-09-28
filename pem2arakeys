@@ -90,7 +90,7 @@ INCLUDES = """
 
 """
 
-KEY_ARRAY = "const crypto_public_key {0:s}[NUMBER_OF_PUBLIC_KEYS] = {1:s}\n"
+KEY_ARRAY = "const crypto_public_key {0:s}[] = {1:s}\n"
 
 # TFTF Signature Types and associated dictionary of types and names
 # NOTE: When adding new types, both the "define" and the dictionary
@@ -237,9 +237,6 @@ def process_input_files(keyfiles, wf, array_name, key_type, usage, singleton):
             # Complete the declaration
             wf.write("};\n\n")
         else:
-            wf.write("#define NUMBER_OF_PUBLIC_KEYS   {0:d}\n\n".
-                     format(len(keyfiles)))
-
             # Add the start of the "public_keys" array
             wf.write(KEY_ARRAY.format(array_name, "{"))
 
@@ -249,6 +246,9 @@ def process_input_files(keyfiles, wf, array_name, key_type, usage, singleton):
 
             # Complete the 2D array declaration
             wf.write("};\n\n")
+
+            wf.write("const uint32_t number_of_public_keys = "
+                     "sizeof(public_keys)/sizeof(crypto_public_key);\n")
 
 
 def main():
