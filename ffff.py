@@ -321,7 +321,7 @@ class Ffff:
                 break
 
             # Check for an invalid element (i.e., either munged or
-            # collides with the 2 FFFF header blocks
+            # collides with the 2 FFFF header blocks)
             if not elt_a.validate(self.element_location_min,
                                   self.element_location_max):
                 self.invalid_elements_found = True
@@ -350,17 +350,19 @@ class Ffff:
                     if end_b >= start_a and start_b <= end_a:
                         self.collisions_found = True
                         collision += [j]
+                        error("Element [{0:d}] @ {1:x}-{2:x} collides with "\
+                              "element [{3:d}] @ {4:x}-{5:x}".
+                              format(i, start_a, end_a, j, start_b, end_b)) 
 
                     # check for other duplicate entries
                     # Per the specification: "At most, one element table
                     # entry with a particular element type, element ID,
-                    # and element genration may be present in the element
+                    # and element generation may be present in the element
                     # table."
                     if elt_a.element_type == elt_b.element_type and \
                        elt_a.element_id == elt_b.element_id and \
-                       elt_a.element_generation == \
-                       elt_b.element_generation:
-                        self.duplicatess_found = True
+                       elt_a.element_generation == elt_b.element_generation:
+                        self.duplicates_found = True
                         duplicate += [j]
 
             self.collisions += [collision]

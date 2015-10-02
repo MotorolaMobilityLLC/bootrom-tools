@@ -48,15 +48,15 @@ DropDir=~/es3-test
 #-----
 for arg in "$@" ; do    # arg will be each positional parameter
     if [[ ${arg} == "-es2tsb" ]]; then  # select target configuration
-        CONFIG_CHIP=${arg}
+        CONFIG_CHIP="es2tsb"
     elif [[ ${arg} == "-es3tsb" ]]; then  # select target configuration
-        CONFIG_CHIP=${arg}
+        CONFIG_CHIP="es3tsb"
     elif [[ ${arg} == "-fpgatsb" ]]; then # select target configuration
-        CONFIG_CHIP=${arg}
+        CONFIG_CHIP="fpgatsb"
     elif [[ ${arg} == "-v" ]]; then       # TFTF verbose mode
         Verbose=${arg}
     else
-        echo "unknown arg $arg"
+        echo "Makeall: unknown arg $arg"
         exit 1
     fi
 done
@@ -90,6 +90,9 @@ fi
 pushd $BuildRoot
 
 # GBFW server build
+echo "--"
+echo "Building the GBFW (GBBOOT) server"
+echo "--"
 makeserver
 if [[ $? == 0 ]]; then
     cp $BuildDir/bootrom-gbfw.bin $AssyDir/s1fw
@@ -100,8 +103,11 @@ else
     exit 1
 fi
 
-# Unsigned build
-make3 ${CONFIG_CHIP} $Verbose
+# Untrusted (non-signed) build
+echo "--"
+echo "Building the Untrusted (non-signed) image"
+echo "--"
+make3 -$CONFIG_CHIP $Verbose
 if [[ $? == 0 ]]; then
     cp $BuildDir/bootrom.bin $AssyDir/s1fw
     cp $BuildDir/bootrom.hex $AssyDir/s1fw
@@ -113,8 +119,11 @@ else
     exit 1
 fi
 
-# Signed build
-make3 ${CONFIG_CHIP} -sign $Verbose
+# Trusted (signed) build
+echo "--"
+echo "Building the Trusted (signed) image"
+echo "--"
+make3 -${CONFIG_CHIP} -sign $Verbose
 if [[ $? == 0 ]]; then
     cp $BinDir/ffff-s2s3.bin $AssyDir/ffff
     cp $BinDir/ffff-s2s3.map $AssyDir/ffff
@@ -124,16 +133,16 @@ else
     exit 1
 fi
 
-# NoBOU build
-make3 ${CONFIG_CHIP} -nobou $Verbose
-if [[ $? == 0 ]]; then
-    cp $BuildDir/bootrom-nb.bin $AssyDir/s1fw
-    cp $BuildDir/bootrom-nb.hex $AssyDir/s1fw
-else
-    echo "Problems building no-BOU bootloader"
-    popd
-    exit 1
-fi
+## NoBOU build
+#make3 -${CONFIG_CHIP} -nobou $Verbose
+#if [[ $? == 0 ]]; then
+#    cp $BuildDir/bootrom-nb.bin $AssyDir/s1fw
+#    cp $BuildDir/bootrom-nb.hex $AssyDir/s1fw
+#else
+#    echo "Problems building no-BOU bootloader"
+#    popd
+#    exit 1
+#fi
 
 
 # (Re)create the drop folder

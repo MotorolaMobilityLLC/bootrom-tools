@@ -60,6 +60,7 @@ Sign2FW=false
 Sign3FW=false
 NoBou=false
 for arg in "$@" ; do    # arg will be each positional parameter
+    echo "make3 ${arg}"
     if [[ ${arg} == "-sign" ]]; then     # Sign the 2nd level Firmware?
         Sign2FW=true
         Sign3FW=true
@@ -90,7 +91,7 @@ for arg in "$@" ; do    # arg will be each positional parameter
     elif [[ ${arg} == "-v" ]]; then       # TFTF verbose mode
         Verbose=${arg}
     else
-        echo "unknown arg $arg"
+        echo "make3: unknown arg $arg"
         exit 1
     fi
 done
@@ -142,7 +143,8 @@ else
 fi
 if [[ $? == 0 ]]; then
     # s3fw tftf
-    create-tftf --code $BuildDir/bootrom.bin --load 0x10000000 --start 0x10000000 --name third --out $BinDir/third.bin --ara-pid 0 --ara-vid 0 $Verbose
+    create-tftf --elf $BuildDir/bootrom --start 0x10000000 \
+                --name third --out $BinDir/third.bin --ara-pid 0 --ara-vid 0 $Verbose
     if [[ $? == 0 ]]; then
         # Sign s3fw
         if $Sign3FW; then
@@ -170,7 +172,8 @@ else
 fi
 if [[ $? == 0 ]]; then
     # 2ndFW tftf
-    create-tftf --elf $BuildDir/bootrom --load 0x10000000 --name second --out $BinDir/second.bin --ara-pid 0 --ara-vid 0 $Verbose
+    create-tftf --elf $BuildDir/bootrom --name second \
+                --out $BinDir/second.bin --ara-pid 0 --ara-vid 0 $Verbose
     if [[ $? == 0 ]]; then
         # Sign 2nsFW
         if $Sign2FW; then
@@ -224,8 +227,9 @@ fi
 # Bundle it all into the FFFF file
 #-----
 echo "Make the FFFF..."
-create-ffff --s2f $BinDir/second.bin --egen 1 --eloc 0x3000 \
-  --s3f $BinDir/third.bin --egen 1 --eloc 0x1000 --name Firmware \
+create-ffff \
+  --s2f $BinDir/second.bin --egen 1 --eloc 0x2000 \
+  --s3f $BinDir/third.bin --egen 1 --eloc 0x5000 --name Firmware \
   --out $BinDir/$FfffName.bin --flash-capacity 0x40000 --erase-size 0x800 \
   --image-length 0x8000 --generation 1 --map $Verbose
 if [[ $? != 0 ]]; then
