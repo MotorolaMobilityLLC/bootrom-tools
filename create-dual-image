@@ -127,16 +127,16 @@ def main():
 
         # Having found that location, we write the first reprocessed FFFF
         # header into it.
-        out_file.write(ffff.ffff_buf[0:ffff.header_block_size])
+        out_file.write(ffff.ffff_buf[0:ffff.get_header_block_size()])
         # We then seek out the relative offset into our FFFF image where the
         # actual second FFFF header wants to live, and write it there.
         out_file.seek(ffff_address + ffff.ffff1.header_offset)
         out_file.write(ffff.ffff_buf[ffff.ffff1.header_offset:ffff.ffff1.header_offset + \
-                       ffff.header_block_size])
+                       ffff.get_header_block_size()])
         # We then seek out the address where the FFFF image expects for actual
         # element data to live, and write out the remainder of the FFFF image
         # there, containing the element data.
-        ffff_file.seek(ffff.ffff1.header_offset + ffff.header_block_size, io.SEEK_SET)
+        ffff_file.seek(ffff.ffff1.header_offset + ffff.get_header_block_size(), io.SEEK_SET)
         out_file.write(ffff_file.read())
         print "Wrote", args.ffff, "from", format(ffff_address, "#x"),\
               "to", format(ffff_address + os.path.getsize(args.ffff), "#x")
