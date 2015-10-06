@@ -76,8 +76,9 @@
     --patch copy ffff[1] ffff[0] 4096
 -t FB-09 -p "Boot failed (status 82000049" --patch xor ffff[0].sentinel de ad be ef \
     --patch copy ffff[1] ffff[0] 4096
--t FB-10 -p "Boot failed (status 8200004a" --patch rep ffff.element[0].2fw.section[0].type 02 \
-    --patch rep ffff.element[1].3fw.section[0].type 02
+-t FB-10 -p "Boot failed (status 8200004a" \
+    --patch rep ffff.element[0].2fw.section[0].type 02 \
+    --patch copy ffff[1] ffff[0] 4096
 
 # TFTF error group:
 #-t FB-11 "status 82000020" requires SPI failure

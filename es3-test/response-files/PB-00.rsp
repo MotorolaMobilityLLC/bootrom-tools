@@ -6,4 +6,3 @@ Boot from SPIROM
 SPI Untrusted: (04000000)
 Reset all cports.
 Hello world from s2fw
-

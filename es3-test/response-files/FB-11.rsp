@@ -3,7 +3,6 @@ Reset all cports.
 Unipro enabled!
 efuse_init: OK
 Boot from SPIROM
-SPI Untrusted: (04000000)
-Reset all cports.
-Hello world from s2fw
+L1 FFFF err: 00000043
+Spi boot failed (09000043), Boot over UniPro (09000043)
 

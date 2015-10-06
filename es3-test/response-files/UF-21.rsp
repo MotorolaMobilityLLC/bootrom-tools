@@ -3,10 +3,8 @@ Reset all cports.
 Unipro enabled!
 efuse_init: OK
 Boot from SPIROM
-ID=6101, WrVal=02000000
 L1 TFTF err: 00000023
-Spi boot failed (09000023), ID=6101, WrVal=09000023
-Boot over UniPro (09000023)
+Spi boot failed (09000023), Boot over UniPro (09000023)
 Module ready advertised.
 Ready-poked; download-ready
 Beginning Greybus FW download.
