@@ -27,14 +27,16 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 #------------------------------------------------------------------------------
-# Make all 3 images, their TFTF files, and bundle into an FFFF file.
+# Make the FFFF file and create an es3-test folder containing the test suite
+# resources
 #
 # Usage:
-#    makeall {-es2tsb | -es3tsb | -fpgatsb } {-v}
+#    makeall {-es2tsb | -es3tsb | -fpgatsb } {-v} {-342}
 #
 #    -es2tsb, -es3tsb, -fpgatsb
 #                        Select the build target
 #    -v                  Verbose mode on TFTF creation
+#    -342      Substitute the L3FW for L2FW to make simulation quicker
 #------------------------------------------------------------------------------
 BuildRoot=~/work/bootrom
 BuildDir=~/work/bootrom/build
@@ -54,10 +56,21 @@ for arg in "$@" ; do    # arg will be each positional parameter
         CONFIG_CHIP="es3tsb"
     elif [[ ${arg} == "-fpgatsb" ]]; then # select target configuration
         CONFIG_CHIP="fpgatsb"
+    elif [[ ${arg} == "-sim" ]]; then    # Compile all levels for Toshba Simulation
+        Sim=${arg}
+    elif [[ ${arg} == "-sim1" ]]; then    # Compile 1stFW for Toshba Simulation
+        Sim="$Sim ${arg}"
+    elif [[ ${arg} == "-sim2" ]]; then    # Compile 2ndFW for Toshba Simulation
+        Sim="$Sim ${arg}"
+    elif [[ ${arg} == "-sim3" ]]; then    # Compile 3rdFW for Toshba Simulation
+        Sim="$Sim ${arg}"
     elif [[ ${arg} == "-prod" ]]; then    # Production version
         Production=${arg}
     elif [[ ${arg} == "-v" ]]; then       # TFTF verbose mode
         Verbose=${arg}
+    elif [[ ${arg} == "-342" ]]; then
+        # Substitute the L3FW for L2FW to make simulation quicker
+        Subst342=${arg}
     elif [[ ${arg} == "-zip" ]]; then   # suppress zip file generation
         Zip=true
     else
@@ -106,7 +119,7 @@ pushd $BuildRoot
 echo "--"
 echo "Building the GBBOOT server"
 echo "--"
-makeserver
+makeserver -$CONFIG_CHIP
 if [[ $? == 0 ]]; then
     cp $BuildDir/gbboot_server.bin $AssyDir/s1fw
     cp $BuildDir/gbboot_server.hex $AssyDir/s1fw
@@ -120,7 +133,7 @@ fi
 echo "--"
 echo "Building the Untrusted (non-signed) image"
 echo "--"
-make3 -$CONFIG_CHIP $Verbose $Production
+make3 -$CONFIG_CHIP $Verbose $Production $Subst342 $Sim
 if [[ $? == 0 ]]; then
     cp $BuildDir/bootrom.bin $AssyDir/s1fw
     cp $BuildDir/bootrom.hex $AssyDir/s1fw
@@ -136,7 +149,7 @@ fi
 echo "--"
 echo "Building the Trusted (signed) image"
 echo "--"
-make3 -${CONFIG_CHIP} -sign $Verbose $Production
+make3 -${CONFIG_CHIP} -sign $Verbose $Production $Subst342 $Sim
 if [[ $? == 0 ]]; then
     cp $BinDir/ffff-s2s3.bin $AssyDir/ffff
     cp $BinDir/ffff-s2s3.map $AssyDir/ffff

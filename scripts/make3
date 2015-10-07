@@ -33,7 +33,7 @@
 #    make3 {{-sim} | [{-sim1} {-sim2} {-sim3}]} \
 #          {{-sign} | [{-s2fw} {-s3fw}]} {-nobou} \
 #          {-es2tsb | -es3tsb | -fpgatsb } \
-#          {-v}
+#          {-v} {-342}
 #
 #    -prod     Enable _SIMULATION mode for all 3 firmware levels
 #    -prod, -prod2, -prod3
@@ -48,6 +48,7 @@
 #    -es2tsb, -es3tsb, -fpgatsb
 #              Select the build target
 #    -v        Verbose mode on TFTF creation
+#    -342      Substitute the L3FW for L2FW to make simulation quicker
 #------------------------------------------------------------------------------
 BuildRoot=~/work/bootrom
 BuildDir=~/work/bootrom/build
@@ -66,6 +67,7 @@ Sim3=false
 Sign2FW=false
 Sign3FW=false
 NoBou=false
+Subst342=false
 for arg in "$@" ; do    # arg will be each positional parameter
     if [[ ${arg} == "-sign" ]]; then     # Sign the 2nd level Firmware?
         Sign2FW=true
@@ -106,6 +108,9 @@ for arg in "$@" ; do    # arg will be each positional parameter
         CONFIG_CHIP="fpgatsb"
     elif [[ ${arg} == "-v" ]]; then       # TFTF verbose mode
         Verbose=${arg}
+    elif [[ ${arg} == "-342" ]]; then
+        # Substitute the L3FW for L2FW to make simulation quicker
+        Subst342=true
     else
         echo "make3: unknown arg $arg"
         exit 1
@@ -196,35 +201,39 @@ fi
 #-----
 # Make the s2FW
 #-----
-echo "Make 2nd stage..."
-make clean
-if $Sim2; then
-    _SIMULATION=1 make second_stage
-    if $Prod2; then
-        _PRODUCTION=1 _SIMULATION=1 make second_stage
-    fi
+if $Subst342; then
+    echo "Skip making 2nd stage..."
 else
-    make second_stage
-    if $Prod2; then
-        _PRODUCTION=1 _make second_stage
-    fi
-fi
-if [[ $? == 0 ]]; then
-    # 2ndFW tftf
-    create-tftf --elf $BuildDir/bootrom --name second \
-                --out $BinDir/second.bin --ara-pid 0 --ara-vid 0 $Verbose
-    if [[ $? == 0 ]]; then
-        # Sign 2nsFW
-        if $Sign2FW; then
-            echo "Sign 2nd stage"
-            sign-tftf --key $KeyDir/key1.pem --type rsa2048-sha256 binary/second.bin
+    echo "Make 2nd stage..."
+    make clean
+    if $Sim2; then
+        _SIMULATION=1 make second_stage
+        if $Prod2; then
+            _PRODUCTION=1 _SIMULATION=1 make second_stage
+        fi
+    else
+        make second_stage
+        if $Prod2; then
+            _PRODUCTION=1 _make second_stage
         fi
     fi
-fi
-if [[ $? != 0 ]]; then
-    echo "Problems creating s2fw"
-    popd
-    exit 1
+    if [[ $? == 0 ]]; then
+        # 2ndFW tftf
+        create-tftf --elf $BuildDir/bootrom --name second \
+                    --out $BinDir/second.bin --ara-pid 0 --ara-vid 0 $Verbose
+        if [[ $? == 0 ]]; then
+            # Sign 2nsFW
+            if $Sign2FW; then
+                echo "Sign 2nd stage"
+                sign-tftf --key $KeyDir/key1.pem --type rsa2048-sha256 binary/second.bin
+            fi
+        fi
+    fi
+    if [[ $? != 0 ]]; then
+        echo "Problems creating s2fw"
+        popd
+        exit 1
+    fi
 fi
 
 
@@ -259,16 +268,29 @@ fi
 #-----
 # Bundle it all into the FFFF file
 #-----
-echo "Make the FFFF..."
-create-ffff \
-  --s2f $BinDir/second.bin --egen 1 --eloc 0x2000 \
-  --s3f $BinDir/third.bin --egen 1 --eloc 0x6000 --name Firmware \
-  --out $BinDir/$FfffName.bin --flash-capacity 0x40000 --erase-size 0x800 \
-  --image-length 0x8000 --generation 1 --map $Verbose
-if [[ $? != 0 ]]; then
-    echo "Problems creating ffff"
-    popd
-    exit 1
+if $Subst342; then
+    echo "Make the FFFF (substitute L3FW for L2FW)..."
+    create-ffff \
+      --s2f $BinDir/third.bin --egen 1 --eloc 0x2000 --name Firmware \
+      --out $BinDir/$FfffName.bin --flash-capacity 0x40000 --erase-size 0x800 \
+      --image-length 0x8000 --generation 1 --map $Verbose
+    if [[ $? != 0 ]]; then
+        echo "Problems creating ffff"
+        popd
+        exit 1
+    fi
+else
+    echo "Make the FFFF..."
+    create-ffff \
+      --s2f $BinDir/second.bin --egen 1 --eloc 0x2000 \
+      --s3f $BinDir/third.bin --egen 1 --eloc 0x6000 --name Firmware \
+      --out $BinDir/$FfffName.bin --flash-capacity 0x40000 --erase-size 0x800 \
+      --image-length 0x8000 --generation 1 --map $Verbose
+    if [[ $? != 0 ]]; then
+        echo "Problems creating ffff"
+        popd
+        exit 1
+    fi
 fi
 
 

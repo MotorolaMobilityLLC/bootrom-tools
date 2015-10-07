@@ -27,14 +27,14 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 #------------------------------------------------------------------------------
-# Make all 3 images, their TFTF files, and bundle into an FFFF file.
+# Make debug and non-debug es3-test folders and bundle them into a single
+# tar.gz drop file.
 #
 # Usage:
-#    makeall {-es2tsb | -es3tsb | -fpgatsb } {-v}
+#    makedrop {-v} {-342}
 #
-#    -es2tsb, -es3tsb, -fpgatsb
-#                        Select the build target
 #    -v                  Verbose mode on TFTF creation
+#    -342      Substitute the L3FW for L2FW to make simulation quicker
 #------------------------------------------------------------------------------
 BuildRoot=~/work/bootrom
 BuildDir=~/work/bootrom/build
@@ -53,6 +53,9 @@ NonDbgDir=es3-test-nodbg
 for arg in "$@" ; do    # arg will be each positional parameter
     if [[ ${arg} == "-v" ]]; then       # TFTF verbose mode
         Verbose=${arg}
+    elif [[ ${arg} == "-342" ]]; then
+        # Substitute the L3FW for L2FW to make simulation quicker
+        Subst342=${arg}
     else
         echo "Makeall: unknown arg $arg"
         exit 1
@@ -81,11 +84,11 @@ fi
 
 
 echo "making debug tree"
-makeall -fpgatsb $Verbose
+makeall -fpgatsb -sim $Verbose $Subst342
 cp -r $DropDir/* $Drop2Dir/$DbgDir
 
 echo "making non-debug tree"
-makeall $* -es3tsb $Verbose
+makeall $* -es3tsb -sim $Verbose $Subst342
 cp -r $DropDir/* $Drop2Dir/$NonDbgDir
 
 # Zip it all up
