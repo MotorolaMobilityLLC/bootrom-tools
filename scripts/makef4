@@ -27,10 +27,10 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 #------------------------------------------------------------------------------
-# Make all 3 images, their TFTF files, and  FFFF file, and the bootrom image.
+# Make L2FW and L3FW images, their TFTF files, and  FFFF file.
 #
 # Usage:
-#    make3 {-es2tsb | -es3tsb | -fpgatsb } {-sign} {-v} {-dbg} \
+#    makef4 {-es2tsb | -es3tsb | -fpgatsb } {-sign} {-v} {-dbg} \
 #          {-nocrypto} {-noclr} {-debugmsg} {-handshake} \
 #          {-stby} {-stby-wait-svr} {-stby-gbboot}  {-342}
 #
@@ -132,7 +132,7 @@ for arg in "$@" ; do    # arg will be each positional parameter
         # Substitute the L3FW for L2FW to speed simulation
         Subst342=true
     else
-        echo "make3: unknown arg $arg"
+        echo "makef4: unknown arg $arg"
         exit 1
     fi
 done
@@ -142,20 +142,6 @@ if [ ! $CONFIG_CHIP ]; then
     echo "CONFIG_CHIP not set, assuming $DEFAULT_CHIP_CONFIG"
     CONFIG_CHIP=$DEFAULT_CHIP_CONFIG
 fi
-
-# Parlay the chip into a bootrom suffix component
-if [[ $CONFIG_CHIP == "es2tsb" ]]; then  # select target configuration
-    ChipSuffix="-es2"
-elif [[ $CONFIG_CHIP == "es3tsb" ]]; then  # select target configuration
-    ChipSuffix=""  # default
-elif [[ $CONFIG_CHIP == "fpgatsb" ]]; then # select target configuration
-    ChipSuffix="-fpga"
-else
-    echo "Unknown chip: $CONFIG_CHIP"
-    exit 1
-fi
-echo "chip $ChipSuffix"
-
 
 # We have GPIO handshake mode if explicitly -handshake or implicitly by -spec
 if $Handshake; then
@@ -297,28 +283,5 @@ else
         popd
         exit 1
     fi
-fi
-
-
-
-#-----
-# Make the s1FW (aka BootRom)
-#-----
-echo "Make 1st stage (BootRom)..."
-make clean
-make
-if [[ $? != 0 ]]; then
-    echo "Problems creating s1fw"
-    popd
-    exit 1
-else
-    if $HaveSpecialTest; then
-        OrnamentedName="bootrom$DbgModeSuffix$CryptoSuffix$DbgSuffix-spec-$SpecialTestNum$ChipSuffix"
-    else
-        OrnamentedName="bootrom$DbgModeSuffix$CryptoSuffix$DbgSuffix$HandshakeSuffix$ChipSuffix"
-    fi
-    mv build/bootrom.bin build/$OrnamentedName.bin
-    mv build/bootrom.hex build/$OrnamentedName.hex
-    echo "Created build/$OrnamentedName.bin"
 fi
 

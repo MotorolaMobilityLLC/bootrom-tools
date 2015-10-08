@@ -42,7 +42,6 @@ BinDir=~/work/bootrom/binary
 KeyDir=~/bin
 AssyDir=~/bootrom-tools/es3-test
 DropDir=~/es3-test
-Drop2Dir=~/es3-test-drop
 DbgDir=es3-test-dbg
 NonDbgDir=es3-test-nodbg
 
@@ -62,40 +61,63 @@ for arg in "$@" ; do    # arg will be each positional parameter
     fi
 done
 
+StdSim="-noclr -stby -stby-wait-svr -stby-gbboot"
 
-# Make sure our target folder exists
-if [ ! -d $Drop2Dir ]
-then
-    echo "Creating assembly folder: $AssyDir"
-    mkdir $Drop2Dir
-fi
-if [ ! -d $Drop2Dir/$DbgDir ]
-then
-    mkdir $Drop2Dir/$DbgDir
-else
-    rm -r $Drop2Dir/$DbgDir/*
-fi
-if [ ! -d $Drop2Dir/$NonDbgDir ]
-then
-    mkdir $Drop2Dir/$NonDbgDir
-else
-    rm -r $Drop2Dir/$NonDbgDir/*
-fi
+#------
+# Establish the argument lists for the various configurations
+#-----
+# The real thing: no extraneous support for testing (opt-crypto-quiet)
+StdProd="-es3tsb"
+
+# Noisy version for Simulation - slower, but easier to analyze (opt-nc-uart-hs)
+StdNoisy="-es3tsb -nocrypto -debugmsg -handshake $StdSim"
+
+# Quiet version for Simulator, used once we no longer need the noisy version
+# to help analyze tests (opt-nc-quiet-hs)
+StdQuiet="-es3tsb -nocrypto -handshake $StdSim"
+
+# Standard version for HAPS FPGA (opt-crypto-uart-hs)
+StdFpga="-fpgatsb -nocrypto -debugmsg -handshake $StdSim"
+
+# Standard version for HAPS FPGA, c/w symbols" (debug-crypto-uart-hs)
+StdFpgaSym="-fpgatsb -dbg -debugmsg -handshake $StdSim"
+
+# Specially instrumented for fault induction on simulator only, and noisy besides (opt-nc-uart-spec-##)
+#***** TBD *****
+
+# Specially instrumented for fault induction on simulator only, but quiet (opt-nc-quiet-spec-##)
+#***** TBD *****
+
+#-----
+# List of build targets
+#------
+#Targets=("$StdFpga" "$StdFpgaSym")
+Targets=("$StdNoisy" "$StdProd" "$StdQuiet" "$StdFpga" "$StdFpgaSym")
 
 
-echo "making debug tree"
-makeall -fpgatsb -sim $Verbose $Subst342
-cp -r $DropDir/* $Drop2Dir/$DbgDir
 
-echo "making non-debug tree"
-makeall $* -es3tsb -sim $Verbose $Subst342
-cp -r $DropDir/* $Drop2Dir/$NonDbgDir
+#-----
+# Make all the canonical builds
+#-----
+First=false
+for i in "${Targets[@]}"
+do
+    echo "making: $i"
+    if ! $First; then
+        # The first time, we first clear the drop folder
+        makeall $i $Verbose $Subst342
+        First=true
+    else
+        makeall $i -justboot $Verbose $Subst342
+    fi
+done
+
 
 # Zip it all up
 echo "Generating drop..."
 pushd ~
 Archive="`date +%Y%m%d-%H%M-%Z`.es3-test.tar.gz"
-tar -zcvf ./$Archive es3-test-drop
+tar -zcvf ./$Archive es3-test
 popd
 echo "Dropped to ~/$Archive"
 

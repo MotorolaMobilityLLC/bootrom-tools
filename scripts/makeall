@@ -31,12 +31,20 @@
 # resources
 #
 # Usage:
-#    makeall {-es2tsb | -es3tsb | -fpgatsb } {-v} {-342}
+#    makeall {-es2tsb | -es3tsb | -fpgatsb } {-v} {-justboot} \
+#          {-nocrypto} {-noclr} {-debugmsg} {-handshake} \
+#          {-stby} {-stby-wait-svr} {-stby-gbboot} {-342}
 #
 #    -es2tsb, -es3tsb, -fpgatsb
 #                        Select the build target
 #    -v                  Verbose mode on TFTF creation
+#
+# TESTING parameters:
 #    -342      Substitute the L3FW for L2FW to make simulation quicker
+#    -nocrypto	Substitute fake cryptographic routines to speed simulation
+#    -noclr	Clear only the minimum amount of RAM to speed simulation
+#    -debugmsg	Allow debug serial output
+#    -handshake	GPIO handshake with simulation/test controller
 #------------------------------------------------------------------------------
 BuildRoot=~/work/bootrom
 BuildDir=~/work/bootrom/build
@@ -45,42 +53,94 @@ KeyDir=~/bin
 AssyDir=~/bootrom-tools/es3-test
 DropDir=~/es3-test
 Zip=false
+SpecialTest=false
+HaveSpecialTest=false
+JustBootrom=false
+CryptoSuffix="-crypto"
+DbgSuffix="-quiet"
+HandshakeSuffix=""
+DbgModeSuffix="-opt"
+Ornamentation=$(bootsuffix $*)
 
 #-----
-# Process any args
+# Process args
 #-----
 for arg in "$@" ; do    # arg will be each positional parameter
-    if [[ ${arg} == "-es2tsb" ]]; then  # select target configuration
+    if $SpecialTest; then
+        # The previous arg was "-spec", so pick up the special test no.
+        SpecialTestNum="${arg} "
+        HaveSpecialTest=true
+        SpecialTest=false
+        echo "have special test $SpecialTestNum"
+    elif [[ ${arg} == "-spec" ]]; then
+        # Take the next arg as a special test number
+        SpecialTest=true
+    elif [[ ${arg} == "-justboot" ]]; then  # select target configuration
+        JustBootrom=true
+    elif [[ ${arg} == "-es2tsb" ]]; then  # select target configuration
         CONFIG_CHIP="es2tsb"
     elif [[ ${arg} == "-es3tsb" ]]; then  # select target configuration
         CONFIG_CHIP="es3tsb"
     elif [[ ${arg} == "-fpgatsb" ]]; then # select target configuration
         CONFIG_CHIP="fpgatsb"
-    elif [[ ${arg} == "-sim" ]]; then    # Compile all levels for Toshba Simulation
-        Sim=${arg}
-    elif [[ ${arg} == "-sim1" ]]; then    # Compile 1stFW for Toshba Simulation
-        Sim="$Sim ${arg}"
-    elif [[ ${arg} == "-sim2" ]]; then    # Compile 2ndFW for Toshba Simulation
-        Sim="$Sim ${arg}"
-    elif [[ ${arg} == "-sim3" ]]; then    # Compile 3rdFW for Toshba Simulation
-        Sim="$Sim ${arg}"
     elif [[ ${arg} == "-prod" ]]; then    # Production version
         Production=${arg}
     elif [[ ${arg} == "-v" ]]; then       # TFTF verbose mode
-        Verbose=${arg}
+        Verbose="${arg} "
+    elif [[ ${arg} == "-dbg" ]]; then     # Build with debugging symbols
+        DbgMode="${arg} "
+        DbgModeSuffix="-debug"
+    elif [[ ${arg} == "-zip" ]]; then     # suppress zip file generation
+        Zip=true
+    # Test args
+    elif [[ ${arg} == "-nocrypto" ]]; then
+        # Substitute fake cryptographic routines to speed simulation
+        NoCrypto="${arg} "
+        CryptoSuffix="-nc"
+    elif [[ ${arg} == "-noclr" ]]; then
+        # Clear only the minimum amount of RAM to speed simulation
+        NoClr="${arg} "
+    elif [[ ${arg} == "-debugmsg" ]]; then
+        # Allow debug serial output
+        DebugMessages="${arg} "
+        DbgSuffix="-uart"
+    elif [[ ${arg} == "-handshake" ]]; then
+        # GPIO handshake with simulation/test controller
+        Handshake="${arg} "
+    elif [[ ${arg} == "-stby" ]]; then
+        #    -handshake	GPIO handshake with simulation/test controller
+        StandbyTest="${arg} "
+    elif [[ ${arg} == "-stby-wait-svr" ]]; then
+        #    -handshake	GPIO handshake with simulation/test controller
+        StandbyWaitForServer="${arg} "
+    elif [[ ${arg} == "-stby-gbboot" ]]; then
+        #    -handshake	GPIO handshake with simulation/test controller
+        GBBootServerStandby="${arg} "
     elif [[ ${arg} == "-342" ]]; then
         # Substitute the L3FW for L2FW to make simulation quicker
-        Subst342=${arg}
-    elif [[ ${arg} == "-zip" ]]; then   # suppress zip file generation
-        Zip=true
+        Subst342="${arg} "
     else
         echo "Makeall: unknown arg $arg"
         exit 1
     fi
 done
+
+# Fill in missing chip
 if [ ! $CONFIG_CHIP ]; then
     echo "CONFIG_CHIP not set, assuming $DEFAULT_CHIP_CONFIG"
     CONFIG_CHIP=$DEFAULT_CHIP_CONFIG
+fi
+
+# Parlay the chip into a bootrom suffix component
+if [[ $CONFIG_CHIP == "es2tsb" ]]; then  # select target configuration
+    ChipSuffix="-es2"
+elif [[ $CONFIG_CHIP == "es3tsb" ]]; then  # select target configuration
+    ChipSuffix=""  # default
+elif [[ $CONFIG_CHIP == "fpgatsb" ]]; then # select target configuration
+    ChipSuffix="-fpga"
+else
+    echo "Unknown chip: $CONFIG_CHIP"
+    exit 1
 fi
 
 
@@ -112,47 +172,80 @@ then
 fi
 
 
+# Compose the bulk of our "makef4 and "makeboot" arguments
+F4Args="-$CONFIG_CHIP $Production -dbg -nocrypto -debugmsg -handshake $NoClr$Subst342"
+F4Args="$F4Args$StandbyTest$StandbyWaitForServer$GBBootServerStandby"
+StdArgs="-$CONFIG_CHIP $NoCrypto$NoClr$DebugMessages$DbgMode"
+StdArgs="$StdArgs$StandbyTest$StandbyWaitForServer$GBBootServerStandby"
+StdArgs="$StdArgs$ProductionS$Subst342"
+if $HaveSpecialTest; then
+    StdArgs="$StdArgs-spec $SpecialTestNum"
+else
+    StdArgs="$StdArgs$Handshake"
+fi
+
+
 
 pushd $BuildRoot
 
-# GBBOOT server build
-echo "--"
-echo "Building the GBBOOT server"
-echo "--"
-makeserver -$CONFIG_CHIP
-if [[ $? == 0 ]]; then
-    cp $BuildDir/gbboot_server.bin $AssyDir/s1fw
-    cp $BuildDir/gbboot_server.hex $AssyDir/s1fw
-else
-    echo "Problems building GBBoot server"
-    popd
-    exit 1
+#-----
+# Build the components that only need to be built once
+#-----
+if ! $JustBootrom; then
+    # GBBOOT server build
+    echo "--"
+    echo "Building the GBBOOT server"
+    echo "--"
+    makeserver -$CONFIG_CHIP
+    if [[ $? == 0 ]]; then
+        mv $BuildDir/gbboot_server.bin $AssyDir/s1fw
+        mv $BuildDir/gbboot_server.hex $AssyDir/s1fw
+    else
+        echo "Problems building GBBoot server"
+        popd
+        exit 1
+    fi
+
+    # Build untrusted (non-signed) FFFF
+    echo "--"
+    echo "Building the Untrusted (non-signed) image"
+    echo "--"
+    makef4 $F4Args
+    if [[ $? == 0 ]]; then
+        mv $BinDir/ffff.bin $AssyDir/ffff
+        mv $BinDir/ffff.map $AssyDir/ffff
+    else
+        echo "Problems building unsigned FFFF"
+        popd
+        exit 1
+    fi
+
+    # Build trusted (signed) FFFF
+    echo "--"
+    echo "Building the Trusted (signed) image"
+    echo "--"
+    makef4 $F4Args -sign
+    if [[ $? == 0 ]]; then
+        mv $BinDir/ffff-sgn.bin $AssyDir/ffff
+        mv $BinDir/ffff-sgn.map $AssyDir/ffff
+    else
+        echo "Problems building signed FFFF"
+        popd
+        exit 1
+    fi
 fi
 
-# Untrusted (non-signed) build
-echo "--"
-echo "Building the Untrusted (non-signed) image"
-echo "--"
-make3 -$CONFIG_CHIP $Verbose $Production $Subst342 $Sim
-if [[ $? == 0 ]]; then
-    cp $BuildDir/bootrom.bin $AssyDir/s1fw
-    cp $BuildDir/bootrom.hex $AssyDir/s1fw
-    cp $BinDir/ffff.bin $AssyDir/ffff
-    cp $BinDir/ffff.map $AssyDir/ffff
-else
-    echo "Problems building unsigned FFFF"
-    popd
-    exit 1
-fi
 
-# Trusted (signed) build
+#-----
+# Build Bootrom
+#-----
 echo "--"
 echo "Building the Trusted (signed) image"
 echo "--"
-make3 -${CONFIG_CHIP} -sign $Verbose $Production $Subst342 $Sim
+makeboot $StdArgs
 if [[ $? == 0 ]]; then
-    cp $BinDir/ffff-s2s3.bin $AssyDir/ffff
-    cp $BinDir/ffff-s2s3.map $AssyDir/ffff
+    mv $BuildDir/bootrom$Ornamentation.bin $AssyDir/s1fw
+    mv $BuildDir/bootrom$Ornamentation.hex $AssyDir/s1fw
 else
     echo "Problems building signed FFFF"
     popd
@@ -160,12 +253,17 @@ else
 fi
 
 
-# (Re)create the drop folder
+
+#-----
+# (Re)create the drop folder from the pieces in the assembly folder
+#-----
 # Make sure our drop folder exists
-if [ -d $DropDir ]
-then
-    echo "Removing old drop folder: $DropDir"
-    rm -r $DropDir
+if ! $JustBootrom; then
+    if [ -d $DropDir ]
+    then
+        echo "Removing old drop folder: $DropDir"
+        rm -r $DropDir
+    fi
 fi
 
 if [ ! -d $DropDir ]
@@ -210,10 +308,10 @@ cp $AssyDir/s1fw/* $DropDir/s1fw
 
 # Generate the test files in the drop folder
 create-bootrom-test-suite \
-  --bin $AssyDir/s1fw/bootrom.bin \
-  --flash $AssyDir/ffff/ffff-s2s3.bin \
+  --bin $AssyDir/s1fw/bootrom$Ornamentation.bin \
+  --flash $AssyDir/ffff/ffff-sgn.bin \
   --desc $AssyDir/es3.tss \
-  --test es3-trusted.ts \
+  --test trusted$Ornamentation.ts \
   --out_folder $DropDir/ffff
 if [[ $? != 0 ]]; then
     echo "Problems creating trusted testsuite"
@@ -222,10 +320,10 @@ if [[ $? != 0 ]]; then
 fi
 
 create-bootrom-test-suite \
-  --bin $AssyDir/s1fw/bootrom.bin \
+  --bin $AssyDir/s1fw/bootrom$Ornamentation.bin \
   --flash $AssyDir/ffff/ffff.bin \
   --desc $AssyDir/es3.tss \
-  --test es3-untrusted.ts \
+  --test untrusted$Ornamentation.ts \
   --out_folder $DropDir/ffff
 if [[ $? != 0 ]]; then
     echo "Problems creating untrusted testsuite"

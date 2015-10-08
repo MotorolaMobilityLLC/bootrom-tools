@@ -2542,7 +2542,7 @@ ffff.element[0].2fw.section[19].section_length  000021f4
 ffff.element[0].2fw.section[19].load_address  000021f8
 ffff.element[0].2fw.section[19].expanded_length  000021fc
 ffff.element[0].2fw.section[0].code  00002200
-ffff.element[0].2fw.section[1].data  00003940
+ffff.element[0].2fw.section[1].data  00003744
 ffff.element[1].3fw 00006000
 ffff.element[1].3fw.sentinel  00006000
 ffff.element[1].3fw.header_size  00006004

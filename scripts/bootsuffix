@@ -1,0 +1,138 @@
+#!/bin/bash
+#
+# Copyright (c) 2015 Google Inc.
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+# 1. Redistributions of source code must retain the above copyright notice,
+# this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+# this list of conditions and the following disclaimer in the documentation
+# and/or other materials provided with the distribution.
+# 3. Neither the name of the copyright holder nor the names of its
+# contributors may be used to endorse or promote products derived from this
+# software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+# THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+# OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+# WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+# ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+#------------------------------------------------------------------------------
+# echo the bootrom suffix.
+#
+# Usage:
+#    bootsuffix {-es2tsb | -es3tsb | -fpgatsb } {-v} {-sym} \
+#          {-nocrypto} {-noclr} {-debugmsg} {-handshake} \
+#          {-stby} {-stby-wait-svr} {-stby-gbboot}  {-342}
+#
+#    -es2tsb, -es3tsb, -fpgatsb
+#              Select the build target
+#    -sym      Compile with debugging symbols
+#    -v        Verbose mode on TFTF creation
+#    -prod     Enable _PRODUCTION mode for all 3 firmware levels
+#
+# TESTING parameters:
+#    -nocrypto	Substitute fake cryptographic routines to speed simulation
+#    -noclr	Clear only the minimum amount of RAM to speed simulation
+#    -debugmsg	Allow debug serial output
+#    -handshake	GPIO handshake with simulation/test controller
+#    -342	Substitute the L3FW for L2FW to speed simulation
+#------------------------------------------------------------------------------
+BuildRoot=~/work/bootrom
+BuildDir=~/work/bootrom/build
+BinDir=~/work/bootrom/binary
+KeyDir=~/bin
+
+#-----
+# Process any args
+#-----
+Production=false
+Symbols=false
+Testing=false
+NoCrypto=false
+NoClr=false
+DebugMessages=false
+Handshake=false
+StandbyTest=false
+StandbyWaitForServer=false
+GBBootServerStandby=false
+Subst342=false
+SpecialTest=false
+CryptoSuffix="-crypto"
+DbgSuffix="-quiet"
+HandshakeSuffix=""
+SymbolSuffix="-opt"
+HaveSpecialTest=false
+SpecialTest=false
+for arg in "$@" ; do    # arg will be each positional parameter
+    if $SpecialTest; then
+        # The previous arg was "-spec", so pick up the special test no.
+        SpecialTestNum=${arg}
+        HaveSpecialTest=true
+        SpecialTest=false
+        Handshake=true  # (Special test implies -handshake)
+    elif [[ ${arg} == "-spec" ]]; then
+        # Take the next arg as a special test number
+        SpecialTest=true
+    elif [[ ${arg} == "-sym" ]]; then     # Compile with debugging symbols
+        SymbolSuffix="-debug"
+    elif [[ ${arg} == "-es2tsb" ]]; then  # select target configuration
+        CONFIG_CHIP="es2tsb"
+    elif [[ ${arg} == "-es3tsb" ]]; then  # select target configuration
+        CONFIG_CHIP="es3tsb"
+    elif [[ ${arg} == "-fpgatsb" ]]; then # select target configuration
+        CONFIG_CHIP="fpgatsb"
+    elif [[ ${arg} == "-prod" ]]; then    # Compile all levels for Toshba Simulation
+        Production=true
+    # Test args
+    elif [[ ${arg} == "-nocrypto" ]]; then
+        # Substitute fake cryptographic routines to speed simulation
+        CryptoSuffix="-nc"
+    elif [[ ${arg} == "-debugmsg" ]]; then
+        # Allow debug serial output
+        DbgSuffix="-uart"
+    elif [[ ${arg} == "-handshake" ]]; then
+        # GPIO handshake with simulation/test controller
+        Handshake=true
+    fi
+done
+
+# Fill in missing chip
+if [ ! $CONFIG_CHIP ]; then
+    CONFIG_CHIP=$DEFAULT_CHIP_CONFIG
+fi
+
+# Parlay the chip into a bootrom suffix component
+if [[ $CONFIG_CHIP == "es2tsb" ]]; then  # select target configuration
+    ChipSuffix="-es2"
+elif [[ $CONFIG_CHIP == "es3tsb" ]]; then  # select target configuration
+    ChipSuffix=""  # default
+elif [[ $CONFIG_CHIP == "fpgatsb" ]]; then # select target configuration
+    ChipSuffix="-fpga"
+else
+    exit 1
+fi
+
+
+# We have GPIO handshake mode if explicitly -handshake or implicitly by -spec
+if $Handshake; then
+    HandshakeSuffix="-hs"
+fi
+
+
+# Ornament the name based on the build parameters
+if $HaveSpecialTest; then
+    echo "$SymbolSuffix$CryptoSuffix$DbgSuffix-spec-$SpecialTestNum$ChipSuffix"
+else
+    echo "$SymbolSuffix$CryptoSuffix$DbgSuffix$HandshakeSuffix$ChipSuffix"
+fi
+
