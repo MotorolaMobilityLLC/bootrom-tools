@@ -124,3 +124,86 @@ The flags can be understood as follows:
 addresses of the image.
 * `--out`: Specifies the filename into which the output hack-image should be
 written for testing purposes.
+
+
+# Scripts to Build and Package Drops to Toshiba
+The bootrom-tools/scripts folder contains tools to build variants of the
+FFFF and bootrom images, with the bootrom image names being ornamented
+with the build mode.
+
+* **makedrop** This is the highest-level script, which builds all the
+variants, generates the test scripts, all FFFF variants, etc. and packages
+it all into a zipped tar.
+* **makeall** (called from makedrop) compiles the server, FFFF and bootrom for
+a specific configuration.
+* **makef4** (called from makeall) compiles the L2FW and L3FW with the desired
+configuration and creates the FFFF.bin. It has an option to compile only
+L3FW and load it as L2FW to speed simulation.
+* **makeboot** (called from makeall) compiles the bootrom with the desired
+configuration, creating an ornamented bootrom-xxx.bin
+* **bootsuffix** is a utility which generates the ornamentation string, used
+in various places in the above tools
+      
+In addition, there are a few extra scripts which can simplify building
+stock versions for development testing. These tend to be wrappers around
+some of the above-mentioned tools, with most of the boilerplate parameters
+hardwired.
+
+* **make3** (deprecated) left over from the ad-hoc days, this builds the FFFF
+and the bootrom in the desired configuration.
+* **makef4norm** is a wrapper for makef4, which generates an FFFF.bin
+akin to that obtained by the current/previous _SIMULATION flag.
+
+All of the above tools share a common set of parameters, with each tool using a large subset of the whole.
+
+##  Parameters
+### General Parameters
+* **-es2tsb, -es3tsb, -fpgatsb** Select the build target chip.
+If omitted, it will try to use the environment variable
+**CONFIG_CHIP**, which should be one of these, without the leading dash.
+* **-sign** Sign the L2FW and L3FW (generates "ffff-sgn.bin" instead of
+"ffff.bin")
+* **-dbg** Compile with debugging symbols and compiler options
+* **-v** Verbose mode on TFTF creation
+* **-prod** Enable _PRODUCTION mode for all 3 firmware levels.
+This disables all test parameters and forces a non-debug build.()
+* **-justboot** Normally, makeall will clear the drop folder before
+updating it with the server, bootrom, FFFF images and all the rest of
+the test suite files. Since the server and FFFF images need only be
+built once, and because makeall is called by makedrop for each of the 
+bootrom images, -justboot is set on all but the first invocation, which
+speeds the generation of the drop and prevents the bootrom builds from
+unnecessary recompilation.
+* **-zip** Tells makeall to generate a zip archive of the (interim) drop folder.
+
+### TESTING parameters
+* **-nocrypto** Substitute fake cryptographic routines to speed simulation
+* **-noclr** Clear only the minimum amount of RAM to speed simulation
+* **-debugmsg** Allow debug serial output
+* **-handshake** GPIO handshake with simulation/test controller
+* **-stby** Enable standby-mode tesing
+* **-stby-wait-svr** Will wait for the server in standby mode
+* **-stby-gbboot** Enable GBBoot server standby mode
+* **-spec `<num>`** Compile special test number `<num>`.
+(This appears to the code as the _SPECIAL_TEST define, the value
+* **-342	** Substitute the L3FW for L2FW to speed simulation
+of which is `<num>`.)
+
+### Parameter Sets by Tool
+* **makedrop** {-v} {-342}
+* **makeall** {-es2tsb | -es3tsb | -fpgatsb } {-v} {-justboot} {-zip}
+{-nocrypto} {-noclr} {-debugmsg} {-handshake}
+{-stby} {-stby-wait-svr} {-stby-gbboot} {-spec `<num>`} {-342}
+{-justboot}
+* **makeboot** {-es2tsb | -es3tsb | -fpgatsb } {-v} {-dbg} {-prod}
+{-nocrypto} {-noclr} {-debugmsg} {-handshake}
+{-stby} {-stby-wait-svr} {-stby-gbboot} {-spec `<num>`} {-342}
+* **makef4** {-es2tsb | -es3tsb | -fpgatsb } {-sign} {-v} {-dbg} {-prod}
+{-nocrypto} {-noclr} {-debugmsg} {-handshake}
+{-stby} {-stby-wait-svr} {-stby-gbboot} {-spec `<num>`} {-342}
+* **makef4norm** {-es2tsb | -es3tsb | -fpgatsb } {-sign} {-v}
+{-handshake} {-stby} {-stby-wait-svr} {-stby-gbboot} {-spec `<num>`} {-342}
+* **make3sim** {-es2tsb | -es3tsb | -fpgatsb } {-sign} {-dbg} {-v} {-prod}
+{-spec `<num>`} {-342}
+
+

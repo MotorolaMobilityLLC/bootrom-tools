@@ -32,7 +32,7 @@
 # Usage:
 #    makef4 {-es2tsb | -es3tsb | -fpgatsb } {-sign} {-v} {-dbg} \
 #          {-nocrypto} {-noclr} {-debugmsg} {-handshake} \
-#          {-stby} {-stby-wait-svr} {-stby-gbboot}  {-342}
+#          {-stby} {-stby-wait-svr} {-stby-gbboot} {-spec <num>} {-342}
 #
 #    -es2tsb, -es3tsb, -fpgatsb
 #              Select the build target
@@ -42,11 +42,17 @@
 #    -prod     Enable _PRODUCTION mode for all 3 firmware levels
 #
 # TESTING parameters:
-#    -nocrypto	Substitute fake cryptographic routines to speed simulation
-#    -noclr	Clear only the minimum amount of RAM to speed simulation
-#    -debugmsg	Allow debug serial output
-#    -handshake	GPIO handshake with simulation/test controller
-#    -342	Substitute the L3FW for L2FW to speed simulation
+#    -nocrypto		Substitute fake cryptographic routines to speed
+#			simulation
+#    -noclr		Clear only the minimum amount of RAM to speed
+#			simulation
+#    -debugmsg		Allow debug serial output
+#    -handshake		GPIO handshake with simulation/test controller
+#    -stby		Enable standby-mode tesing
+#    -stby-wait-svr	Will wait for the server in standby mode
+#    -stby-gbboot	Enable GBBoot server standby mode
+#    -spec <num>	Compile special test number `<num>`.
+#    -342		Substitute the L3FW for L2FW to speed simulation
 #------------------------------------------------------------------------------
 BuildRoot=~/work/bootrom
 BuildDir=~/work/bootrom/build

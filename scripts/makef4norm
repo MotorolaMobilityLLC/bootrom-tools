@@ -30,19 +30,23 @@
 # Make cannonical L2FW and L3FW images, their TFTF files, and  FFFF file.
 #
 # Usage:
-#    makef4norm {-es2tsb | -es3tsb | -fpgatsb } {-sign} {-v} {-sym} {-342} \
-#               {-noclr}
+#    makef4norm {-es2tsb | -es3tsb | -fpgatsb } {-sign} {-v} \
+#               {-handshake}  {-stby} {-stby-wait-svr} {-stby-gbboot} \
+#               {-spec `<num>`} {-342}
 #
 #    -es2tsb, -es3tsb, -fpgatsb
 #              Select the build target
 #    -sign     Sign both level 2 & 3 firmware
-#    -sym      Compile with debugging symbols
 #    -v        Verbose mode on TFTF creation
 #    -prod     Enable _PRODUCTION mode for all 3 firmware levels
 #
 # TESTING parameters:
-#    -noclr	Clear only the minimum amount of RAM to speed simulation
-#    -342	Substitute the L3FW for L2FW to speed simulation
+#    -handshake		GPIO handshake with simulation/test controller
+#    -stby		Enable standby-mode tesing
+#    -stby-wait-svr	Will wait for the server in standby mode
+#    -stby-gbboot	Enable GBBoot server standby mode
+#    -spec <num>	Compile special test number `<num>`.
+#    -342		Substitute the L3FW for L2FW to speed simulation
 #------------------------------------------------------------------------------
 BuildRoot=~/work/bootrom
 BuildDir=~/work/bootrom/build
@@ -53,7 +57,7 @@ KeyDir=~/bin
 # Process any args
 #-----
 Production=false
-Symbols=false
+DebugMode=false
 Testing=false
 NoCrypto=false
 NoClr=false
@@ -79,8 +83,8 @@ for arg in "$@" ; do    # arg will be each positional parameter
         SpecialTest=true
     elif [[ ${arg} == "-sign" ]]; then    # Sign the 2nd & 3rd level Firmware?
         Sign=${arg}
-    elif [[ ${arg} == "-sym" ]]; then     # Compile with debugging symbols
-        Symbols=true
+    elif [[ ${arg} == "-dbg" ]]; then     # Compile with debugging symbols
+        DebugMode=true
         SymbolSuffix="-debug"
     elif [[ ${arg} == "-es2tsb" ]]; then  # select target configuration
         CONFIG_CHIP="es2tsb"
@@ -144,8 +148,8 @@ if $Handshake; then
 fi
 
 
-echo "makef4 -$CONFIG_CHIP -sym -nocrypto -noclr -debugmsg -handshake $Verbose $Sign $Subst342 -stby -stby-wait-svr -stby-gbboot"
-makef4 -$CONFIG_CHIP -sym -nocrypto -noclr -debugmsg -handshake $Verbose \
+echo "makef4 -$CONFIG_CHIP -dbg -nocrypto -noclr -debugmsg -handshake $Verbose $Sign $Subst342 -stby -stby-wait-svr -stby-gbboot"
+makef4 -$CONFIG_CHIP -dbg -nocrypto -noclr -debugmsg -handshake $Verbose \
         $Sign $Subst342 \
        -stby -stby-wait-svr -stby-gbboot
 

@@ -31,20 +31,36 @@
 # resources
 #
 # Usage:
-#    makeall {-es2tsb | -es3tsb | -fpgatsb } {-v} {-justboot} \
+#    makeall {-es2tsb | -es3tsb | -fpgatsb } {-v} {-justboot} {-zip} \
 #          {-nocrypto} {-noclr} {-debugmsg} {-handshake} \
 #          {-stby} {-stby-wait-svr} {-stby-gbboot} {-342}
 #
 #    -es2tsb, -es3tsb, -fpgatsb
-#                        Select the build target
-#    -v                  Verbose mode on TFTF creation
+#		Select the build target
+#    -v		Verbose mode on TFTF creation
+#    -justboot	Normally, makeall will clear the drop folder before
+#		updating it with the server, bootrom, FFFF images and all
+#		the rest of the test suite files. Since the server and FFFF
+#		images need only be built once, and because makeall is called
+#		by makedrop for each of the bootrom images, -justboot is set
+#		on all but the first invocation, which speeds the generation
+#		of the drop and prevents the bootrom builds from unnecessary
+#		recompilation.
+#    -zip	Tells makeall to generate a zip archive of the (interim)
+#		drop folder.
 #
 # TESTING parameters:
-#    -342      Substitute the L3FW for L2FW to make simulation quicker
-#    -nocrypto	Substitute fake cryptographic routines to speed simulation
-#    -noclr	Clear only the minimum amount of RAM to speed simulation
-#    -debugmsg	Allow debug serial output
-#    -handshake	GPIO handshake with simulation/test controller
+#    -nocrypto		Substitute fake cryptographic routines to speed
+#			simulation
+#    -noclr		Clear only the minimum amount of RAM to speed
+#			simulation
+#    -debugmsg		Allow debug serial output
+#    -handshake		GPIO handshake with simulation/test controller
+#    -stby		Enable standby-mode tesing
+#    -stby-wait-svr	Will wait for the server in standby mode
+#    -stby-gbboot	Enable GBBoot server standby mode
+#    -spec <num>	Compile special test number `<num>`.
+#    -342		Substitute the L3FW for L2FW to speed simulation
 #------------------------------------------------------------------------------
 BuildRoot=~/work/bootrom
 BuildDir=~/work/bootrom/build
@@ -90,7 +106,7 @@ for arg in "$@" ; do    # arg will be each positional parameter
     elif [[ ${arg} == "-dbg" ]]; then     # Build with debugging symbols
         DbgMode="${arg} "
         DbgModeSuffix="-debug"
-    elif [[ ${arg} == "-zip" ]]; then     # suppress zip file generation
+    elif [[ ${arg} == "-zip" ]]; then     # enable zip file generation
         Zip=true
     # Test args
     elif [[ ${arg} == "-nocrypto" ]]; then
