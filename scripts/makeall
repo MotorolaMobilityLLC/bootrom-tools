@@ -32,7 +32,7 @@
 #
 # Usage:
 #    makeall {-es2tsb | -es3tsb | -fpgatsb } {-v} {-justboot} {-zip} \
-#          {-nocrypto} {-noclr} {-debugmsg} {-handshake} \
+#          {-nocrypto} {-noclr} {-nodelay} {-debugmsg} {-handshake} \
 #          {-stby} {-stby-wait-svr} {-stby-gbboot} {-342}
 #
 #    -es2tsb, -es3tsb, -fpgatsb
@@ -116,6 +116,9 @@ for arg in "$@" ; do    # arg will be each positional parameter
     elif [[ ${arg} == "-noclr" ]]; then
         # Clear only the minimum amount of RAM to speed simulation
         NoClr="${arg} "
+    elif [[ ${arg} == "-nodelay" ]]; then
+        # Clear only the minimum amount of RAM to speed simulation
+        NoDelay="${arg} "
     elif [[ ${arg} == "-debugmsg" ]]; then
         # Allow debug serial output
         DebugMessages="${arg} "
@@ -189,9 +192,9 @@ fi
 
 
 # Compose the bulk of our "makef4 and "makeboot" arguments
-F4Args="-$CONFIG_CHIP $Production -dbg -nocrypto -debugmsg -handshake $NoClr$Subst342"
+F4Args="-$CONFIG_CHIP $Production -dbg -nocrypto -debugmsg -handshake $NoClr$NoDelay$Subst342"
 F4Args="$F4Args$StandbyTest$StandbyWaitForServer$GBBootServerStandby"
-StdArgs="-$CONFIG_CHIP $NoCrypto$NoClr$DebugMessages$DbgMode"
+StdArgs="-$CONFIG_CHIP $NoCrypto$NoClr$NoDelay$DebugMessages$DbgMode"
 StdArgs="$StdArgs$StandbyTest$StandbyWaitForServer$GBBootServerStandby"
 StdArgs="$StdArgs$ProductionS$Subst342"
 if $HaveSpecialTest; then
@@ -215,7 +218,10 @@ if ! $JustBootrom; then
     makeserver -$CONFIG_CHIP
     if [[ $? == 0 ]]; then
         mv $BuildDir/gbboot_server.bin $AssyDir/s1fw
-        mv $BuildDir/gbboot_server.hex $AssyDir/s1fw
+        if [ -f $BuildDir/gbboot_server.hex ]; then
+          mv $BuildDir/gbboot_server.hex $AssyDir/s1fw
+        fi
+        mv $BuildDir/brom*.dat $AssyDir/s1fw
     else
         echo "Problems building GBBoot server"
         popd
@@ -261,7 +267,11 @@ echo "--"
 makeboot $StdArgs
 if [[ $? == 0 ]]; then
     mv $BuildDir/bootrom$Ornamentation.bin $AssyDir/s1fw
-    mv $BuildDir/bootrom$Ornamentation.hex $AssyDir/s1fw
+    if [ -f $$BuildDir/bootrom$Ornamentation.hex ]; then
+        mv $BuildDir/bootrom$Ornamentation.hex $AssyDir/s1fw
+    fi
+    mv $BuildDir/bromcAP$Ornamentation.dat $AssyDir/s1fw
+    mv $BuildDir/bromcGP$Ornamentation.dat $AssyDir/s1fw
 else
     echo "Problems building signed FFFF"
     popd

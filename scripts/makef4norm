@@ -148,8 +148,7 @@ if $Handshake; then
 fi
 
 
-echo "makef4 -$CONFIG_CHIP -dbg -nocrypto -noclr -debugmsg -handshake $Verbose $Sign $Subst342 -stby -stby-wait-svr -stby-gbboot"
-makef4 -$CONFIG_CHIP -dbg -nocrypto -noclr -debugmsg -handshake $Verbose \
+makef4 -$CONFIG_CHIP -dbg -nocrypto -noclr -nodelay -debugmsg -handshake $Verbose \
         $Sign $Subst342 \
        -stby -stby-wait-svr -stby-gbboot
 

@@ -61,7 +61,7 @@ for arg in "$@" ; do    # arg will be each positional parameter
     fi
 done
 
-StdSim="-noclr -stby -stby-wait-svr -stby-gbboot"
+StdSim="-noclr -nodelay -stby -stby-wait-svr -stby-gbboot"
 
 #------
 # Establish the argument lists for the various configurations
@@ -102,7 +102,7 @@ Targets=("$StdNoisy" "$StdProd" "$StdQuiet" "$StdFpga" "$StdFpgaSym")
 First=false
 for i in "${Targets[@]}"
 do
-    echo "making: $i"
+    #echo "making: $i"
     if ! $First; then
         # The first time, we first clear the drop folder
         makeall $i $Verbose $Subst342

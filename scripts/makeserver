@@ -82,7 +82,11 @@ else
 fi
 pushd $BuildDir
 mv bootrom.bin "gbboot_server.bin"
-mv bootrom.hex "gbboot_server.hex"
+if [ -f bootrom.hex ]; then
+    mv bootrom.hex "gbboot_server.hex"
+fi
+    mv bromcAP.dat "bromcAP_server.dat"
+    mv bromcGP.dat "bromcGP_server.dat"
 popd
 
 echo "Done"

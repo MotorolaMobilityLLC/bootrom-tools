@@ -31,7 +31,7 @@
 #
 # Usage:
 #    makef4 {-es2tsb | -es3tsb | -fpgatsb } {-sign} {-v} {-dbg} \
-#          {-nocrypto} {-noclr} {-debugmsg} {-handshake} \
+#          {-nocrypto} {-noclr} {-nodelay} {-debugmsg} {-handshake} \
 #          {-stby} {-stby-wait-svr} {-stby-gbboot} {-spec <num>} {-342}
 #
 #    -es2tsb, -es3tsb, -fpgatsb
@@ -68,6 +68,7 @@ DbgMode=false
 Testing=false
 NoCrypto=false
 NoClr=false
+NoCDelay=false
 DebugMessages=false
 Handshake=false
 StandbyTest=false
@@ -114,6 +115,10 @@ for arg in "$@" ; do    # arg will be each positional parameter
         # Clear only the minimum amount of RAM to speed simulation
         Testing=true
         NoClr=true
+    elif [[ ${arg} == "-nodelay" ]]; then
+        # Clear only the minimum amount of RAM to speed simulation
+        Testing=true
+        NoDelay=true
     elif [[ ${arg} == "-debugmsg" ]]; then
         # Allow debug serial output
         Testing=true
@@ -166,6 +171,9 @@ if ! $Production; then
     fi
     if $NoClr; then
         export _CLEAR_MIN_MEMORY=1
+    fi
+    if $NoDelay; then
+        export _DISABLE_TIME_CONSUMING_DELAY=1
     fi
     if $Handshake; then
         export _HANDSHAKE=1

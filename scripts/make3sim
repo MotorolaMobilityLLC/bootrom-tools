@@ -93,11 +93,11 @@ if [ ! $CONFIG_CHIP ]; then
 fi
 
 if $HaveSpecialTest; then
-    make3 -$CONFIG_CHIP -nocrypto -noclr -debugmsg -handshake \
+    make3 -$CONFIG_CHIP -nocrypto -noclr -nodelay -debugmsg -handshake \
           -stby -stby-wait-svr -stby-gbboot $Sign $DbgMode $Production $Subst342 \
           -spec $SpecialTestNum
 else
-    make3 -$CONFIG_CHIP -nocrypto -noclr -debugmsg -handshake \
+    make3 -$CONFIG_CHIP -nocrypto -noclrv -debugmsg -handshake \
           -stby -stby-wait-svr -stby-gbboot $Sign $DbgMode $Production $Subst342
 fi
 
