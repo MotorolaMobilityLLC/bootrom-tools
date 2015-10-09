@@ -61,7 +61,7 @@ for arg in "$@" ; do    # arg will be each positional parameter
     fi
 done
 
-StdSim="-noclr -nodelay -stby -stby-wait-svr -stby-gbboot"
+StdSim="-nodelay -stby -stby-wait-svr -stby-gbboot"
 
 #-----
 # Establish the argument lists for the various configurations

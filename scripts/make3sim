@@ -31,20 +31,17 @@
 # as if the -sim (_SIMULATION) flag still existed
 #
 # Usage:
-#    make3sim {-es2tsb | -es3tsb | -fpgatsb } {-sign} {-v} {-prod} {-342}
+#    make3sim {-es2tsb | -es3tsb | -fpgatsb } {-sign} {-v} {-prod}\
+#             {-gearchange} {-342}
 #
 #    -v        Verbose mode on TFTF creation
 #    -prod     Enable _PRODUCTION mode for all 3 firmware levels
-#    -prod, -prod2, -prod3
-#              Enable _PRODUCTION mode for specific firmware levels
-#    -sim      Enable _SIMULATION mode for all 3 firmware levels
-#    -sim1, -sim2, -sim3
-#              Enable _SIMULATION mode for specific firmware levels
 #    -sign     Sign both level 2 & 3 firmware
 #    -es2tsb, -es3tsb, -fpgatsb
 #              Select the build target
 #
 # TESTING parameters:
+#    -gearchange	Test for changing UniPro gear change
 #    -spec <num>	Compile special test number `<num>`.
 #    -342		Substitute the L3FW for L2FW to speed simulation
 #------------------------------------------------------------------------------
@@ -80,6 +77,9 @@ for arg in "$@" ; do    # arg will be each positional parameter
     elif [[ ${arg} == "-342" ]]; then
         # Substitute the L3FW for L2FW to speed simulation
         Subst342=${arg}
+    elif [[ ${arg} == "-gearchange" ]]; then
+        # Test for changing UniPro gear change
+        GearChangeTest=${arg}
     else
         echo "make3sim: unknown arg $arg"
         exit 1
@@ -93,11 +93,12 @@ if [ ! $CONFIG_CHIP ]; then
 fi
 
 if $HaveSpecialTest; then
-    make3 -$CONFIG_CHIP -nocrypto -noclr -nodelay -debugmsg -handshake \
-          -stby -stby-wait-svr -stby-gbboot $Sign $DbgMode $Production $Subst342 \
-          -spec $SpecialTestNum
+    make3 -$CONFIG_CHIP -nocrypto -nodelay -debugmsg -handshake \
+          -stby -stby-wait-svr -stby-gbboot $GearChangeTest $Sign \
+          $DbgMode $Production $Subst342 -spec $SpecialTestNum
 else
-    make3 -$CONFIG_CHIP -nocrypto -noclrv -debugmsg -handshake \
-          -stby -stby-wait-svr -stby-gbboot $Sign $DbgMode $Production $Subst342
+    make3 -$CONFIG_CHIP -nocrypto -nodelay -debugmsg -handshake \
+          -stby -stby-wait-svr -stby-gbboot $GearChangeTest $Sign \
+          $DbgMode $Production $Subst342
 fi
 

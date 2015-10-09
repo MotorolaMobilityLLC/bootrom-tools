@@ -30,10 +30,12 @@
 # Make the GBFW server.
 #
 # Usage:
-#    make3 {-es2tsb | -es3tsb | -fpgatsb } {-prod}
+#    make3 {-es2tsb | -es3tsb | -fpgatsb } {-prod} {-gearchange}
 #
 #    -es2tsb, -es3tsb, -fpgatsb
-#                        Select the build target
+#			Select the build target
+#    -prod		Enable _PRODUCTION mode for all 3 firmware levels
+#    -gearchange	Test for changing UniPro gear change
 #------------------------------------------------------------------------------
 BuildRoot=~/work/bootrom
 BuildDir=~/work/bootrom/build
@@ -52,6 +54,9 @@ for arg in "$@" ; do    # arg will be each positional parameter
         CONFIG_CHIP="fpgatsb"
      elif [[ ${arg} == "-prod" ]]; then    # _PRODUCTION version
         Production=true
+    elif [[ ${arg} == "-gearchange" ]]; then
+        # Test for changing UniPro gear change
+        GearChangeTest="${arg} "
     else
         echo "unknown arg $arg"
         exit 1
@@ -61,19 +66,25 @@ done
 # Configure for a specific chip/target
 $BuildRoot/configure ${CONFIG_CHIP}
 
+# Export the various settings so that makefile will see them
+export BUILD_FOR_GBBOOT_SERVER=1
+if $GearChangeTest; then
+    export _GEAR_CHANGE_TEST=1
+fi
+if $Production; then
+    export _PRODUCTION=1
+else
+    export _PRODUCTION=0
+fi
+
+
 
 #-----
 # Make the APBridge/server
 #-----
 echo "Make the GBBOOT server..."
 make clean
-if $Production; then
-    echo BUILD_FOR_GBBOOT_SERVER=1 _PRODUCTION=1 make gbboot_server
-    BUILD_FOR_GBBOOT_SERVER=1 _PRODUCTION=1 make gbboot_server
-else
-    echo BUILD_FOR_GBBOOT_SERVER=1 make gbboot_server
-    BUILD_FOR_GBBOOT_SERVER=1 make gbboot_server
-fi
+make gbboot_server
 pushd $BuildDir
 mv bootrom.bin "gbboot_server.bin"
 if [ -f bootrom.hex ]; then

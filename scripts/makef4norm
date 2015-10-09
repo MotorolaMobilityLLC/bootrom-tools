@@ -31,8 +31,8 @@
 #
 # Usage:
 #    makef4norm {-es2tsb | -es3tsb | -fpgatsb } {-sign} {-v} \
-#               {-handshake}  {-stby} {-stby-wait-svr} {-stby-gbboot} \
-#               {-spec `<num>`} {-342}
+#               {-handshake} {-stby} {-stby-wait-svr} {-stby-gbboot} \
+#               {-gearchange} {-spec `<num>`} {-342}
 #
 #    -es2tsb, -es3tsb, -fpgatsb
 #              Select the build target
@@ -45,6 +45,7 @@
 #    -stby		Enable standby-mode tesing
 #    -stby-wait-svr	Will wait for the server in standby mode
 #    -stby-gbboot	Enable GBBoot server standby mode
+#    -gearchange	Test for changing UniPro gear change
 #    -spec <num>	Compile special test number `<num>`.
 #    -342		Substitute the L3FW for L2FW to speed simulation
 #------------------------------------------------------------------------------
@@ -60,7 +61,6 @@ Production=false
 DebugMode=false
 Testing=false
 NoCrypto=false
-NoClr=false
 DebugMessages=false
 Handshake=false
 StandbyTest=false
@@ -102,10 +102,6 @@ for arg in "$@" ; do    # arg will be each positional parameter
         Testing=true
         NoCrypto=true
         CryptoSuffix="-nc"
-    elif [[ ${arg} == "-noclr" ]]; then
-        # Clear only the minimum amount of RAM to speed simulation
-        Testing=true
-        NoClr=true
     elif [[ ${arg} == "-debugmsg" ]]; then
         # Allow debug serial output
         Testing=true
@@ -126,6 +122,10 @@ for arg in "$@" ; do    # arg will be each positional parameter
         #    -handshake	GPIO handshake with simulation/test controller
         Testing=true
         GBBootServerStandby=true
+    elif [[ ${arg} == "-gearchange" ]]; then
+        # Test for changing UniPro gear change
+        Testing=true
+        GearChangeTest="${arg} "
     elif [[ ${arg} == "-342" ]]; then
         # Substitute the L3FW for L2FW to speed simulation
         Subst342=${arg}
@@ -148,7 +148,7 @@ if $Handshake; then
 fi
 
 
-makef4 -$CONFIG_CHIP -dbg -nocrypto -noclr -nodelay -debugmsg -handshake $Verbose \
+makef4 -$CONFIG_CHIP -dbg -nocrypto $GearChangeTest -nodelay -debugmsg -handshake $Verbose \
         $Sign $Subst342 \
        -stby -stby-wait-svr -stby-gbboot
 
