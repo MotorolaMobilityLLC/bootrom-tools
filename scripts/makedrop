@@ -63,24 +63,24 @@ done
 
 StdSim="-noclr -nodelay -stby -stby-wait-svr -stby-gbboot"
 
-#------
+#-----
 # Establish the argument lists for the various configurations
 #-----
 # The real thing: no extraneous support for testing (opt-crypto-quiet)
-StdProd="-es3tsb"
+StdProd="-es3tsb $Subst342 $Verbose"
 
 # Noisy version for Simulation - slower, but easier to analyze (opt-nc-uart-hs)
-StdNoisy="-es3tsb -nocrypto -debugmsg -handshake $StdSim"
+StdNoisy="-es3tsb -nocrypto -debugmsg -handshake $Subst342 $Verbose $StdSim"
 
 # Quiet version for Simulator, used once we no longer need the noisy version
 # to help analyze tests (opt-nc-quiet-hs)
-StdQuiet="-es3tsb -nocrypto -handshake $StdSim"
+StdQuiet="-es3tsb -nocrypto -handshake $Subst342 $Verbose $StdSim"
 
 # Standard version for HAPS FPGA (opt-crypto-uart-hs)
-StdFpga="-fpgatsb -nocrypto -debugmsg -handshake $StdSim"
+StdFpga="-fpgatsb -nocrypto -debugmsg -handshake $Subst342 $Verbose $StdSim"
 
 # Standard version for HAPS FPGA, c/w symbols" (debug-crypto-uart-hs)
-StdFpgaSym="-fpgatsb -dbg -debugmsg -handshake $StdSim"
+StdFpgaSym="-fpgatsb -dbg -debugmsg -handshake $Subst342 $Verbose $StdSim"
 
 # Specially instrumented for fault induction on simulator only, and noisy besides (opt-nc-uart-spec-##)
 #***** TBD *****
@@ -90,7 +90,7 @@ StdFpgaSym="-fpgatsb -dbg -debugmsg -handshake $StdSim"
 
 #-----
 # List of build targets
-#------
+#-----
 #Targets=("$StdFpga" "$StdFpgaSym")
 Targets=("$StdNoisy" "$StdProd" "$StdQuiet" "$StdFpga" "$StdFpgaSym")
 
