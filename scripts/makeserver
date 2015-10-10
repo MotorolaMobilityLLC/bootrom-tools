@@ -30,14 +30,8 @@
 # Make the GBFW server.
 #
 # Usage:
-#    make3 {-es2tsb | -es3tsb | -fpgatsb }
+#    make3 {-es2tsb | -es3tsb | -fpgatsb } {-prod}
 #
-#    -sim                Enable _SIMULATION mode for all 3 firmware levels
-#    -sim1, -sim2, -sim3 Enable _SIMULATION mode for specific firmware levels
-#    -sign               Sign both level 2 & 3 firmware
-#    -s2fw               Sign the level2 firmware
-#    -s3fw               Sign the level3 firmware
-#    -nobou              Suppress Boot-Over-Unipro
 #    -es2tsb, -es3tsb, -fpgatsb
 #                        Select the build target
 #------------------------------------------------------------------------------
