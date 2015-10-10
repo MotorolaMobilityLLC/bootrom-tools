@@ -216,18 +216,6 @@ if [[ $? != 0 ]]; then
     popd
     exit 1
 else
-    # Ornament the name based on the build parameters
-    Ornamentation=$(bootsuffix $*)
-    OrnamentedName="bootrom$Ornamentation"
-    mv build/bootrom.bin build/$OrnamentedName.bin
-    if [ -f build/bootrom.hex ]; then
-        mv build/bootrom.hex build/$OrnamentedName.hex
-    fi
-    if [ -f build/bootrom.hex ]; then
-        mv build/bootrom.hex build/$OrnamentedName.hex
-    fi
-    mv build/bromcAP.dat build/bromcAP$Ornamentation.dat
-    mv build/bromcGP.dat build/bromcGP$Ornamentation.dat
-    echo "Created build/$OrnamentedName.bin"
+    echo "Created build/bootrom.bin et al"
 fi
 

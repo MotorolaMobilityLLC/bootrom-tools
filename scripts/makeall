@@ -266,12 +266,12 @@ echo "Building the Trusted (signed) image"
 echo "--"
 makeboot $StdArgs
 if [[ $? == 0 ]]; then
-    mv $BuildDir/bootrom$Ornamentation.bin $AssyDir/s1fw
-    if [ -f $$BuildDir/bootrom$Ornamentation.hex ]; then
-        mv $BuildDir/bootrom$Ornamentation.hex $AssyDir/s1fw
+    mv $BuildDir/bootrom.bin $AssyDir/s1fw/bootrom$Ornamentation.bin
+    if [ -f $BuildDir/bootrom.hex ]; then
+        mv $BuildDir/bootrom.hex $AssyDir/s1fw/bootrom$Ornamentation.hex
     fi
-    mv $BuildDir/bromcAP$Ornamentation.dat $AssyDir/s1fw
-    mv $BuildDir/bromcGP$Ornamentation.dat $AssyDir/s1fw
+    mv $BuildDir/bromcAP.dat $AssyDir/s1fw/bromcAP$Ornamentation.dat
+    mv $BuildDir/bromcGP.dat $AssyDir/s1fw/bromcGP$Ornamentation.dat
 else
     echo "Problems building signed FFFF"
     popd

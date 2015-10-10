@@ -1,0 +1,120 @@
+#!/bin/bash
+#
+# Copyright (c) 2015 Google Inc.
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+# 1. Redistributions of source code must retain the above copyright notice,
+# this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+# this list of conditions and the following disclaimer in the documentation
+# and/or other materials provided with the distribution.
+# 3. Neither the name of the copyright holder nor the names of its
+# contributors may be used to endorse or promote products derived from this
+# software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+# THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+# OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+# WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+# ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+#------------------------------------------------------------------------------
+# Make debug and non-debug es3-test folders and bundle them into a single
+# tar.gz drop file.
+#
+# Usage:
+#    makedelivery {-v} {-342}
+#
+#    -v                  Verbose mode on TFTF creation
+#    -342      Substitute the L3FW for L2FW to make simulation quicker
+#------------------------------------------------------------------------------
+BuildRoot=~/work/bootrom
+BuildDir=~/work/bootrom/build
+DeliveryName=es3-bootrom-delivery
+DropDir=~/$DeliveryName
+Ornamentation=$(bootsuffix $*)
+
+
+#-----
+# Process any args
+#-----
+for arg in "$@" ; do    # arg will be each positional parameter
+    if [[ ${arg} == "-v" ]]; then       # TFTF verbose mode
+        Verbose=${arg}
+    elif [[ ${arg} == "-342" ]]; then
+        # Substitute the L3FW for L2FW to make simulation quicker
+        Subst342=${arg}
+    else
+        echo "Makeall: unknown arg $arg"
+        exit 1
+    fi
+done
+
+
+# Make the real thing: no extraneous support for testing (opt-crypto-quiet)
+echo "Making the bootrom image"
+makeboot -es3tsb
+if [[ $? != 0 ]]; then
+    echo "Problems making the delivery bootrom"
+    exit 1
+fi
+
+
+# Make sure our delivery folder(s) exist
+if [ -d $DropDir ]; then
+    echo "Removing old delivery folder: $DropDir"
+    rm -rf $DropDir
+fi
+if [ ! -d $DropDir ]; then
+    echo "Creating delivery folder: $DropDir"
+    mkdir $DropDir
+fi
+
+
+# Copy the bootrom files into the drop folder
+echo "Copying the bootrom files to $DropDir"
+pushd $DropDir
+cp $BuildDir/bromcAP.bin $DropDir
+cp $BuildDir/bromcAP.bitcount $DropDir
+cp $BuildDir/bromcAP.dat $DropDir
+cp $BuildDir/bromcGP.bin $DropDir
+cp $BuildDir/bromcGP.bitcount $DropDir
+cp $BuildDir/bromcGP.dat $DropDir
+#cp $BuildDir/bootrom.hex $DropDir/bootrom$Ornamentation.hex
+
+# Copy the source and tools trees into the drop folder and remove any
+# hidden git or reviewboard files.
+echo "Copying the source tree to $DropDir"
+git clone https://github.com/projectara/bootrom
+rm -rf bootrom/.git* bootrom/.reviewboardrc
+
+echo "Copying the tools tree to $DropDir"
+git clone https://github.com/projectara/bootrom-tools
+rm -rf bootrom-tools/.git* bootrom-tools/.reviewboardrc
+popd
+
+# Zip it all up
+ArchiveRoot="`date +%Y%m%d-%H%M-%Z`.$DeliveryName"
+echo "Archive is $Archive"
+pushd ~
+echo "Zipping delivery drop..."
+Archive="$ArchiveRoot.tar.gz"
+tar -zcvf ./$Archive $DeliveryName
+
+echo "Generating delivery drop hash..."
+Sha="$ArchiveRoot.sha256"
+sha256sum < $Archive > $Sha
+popd
+echo "Drop @ ~/$Archive"
+echo "Hash @ ~/$Sha"
+
+# Done
+
