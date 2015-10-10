@@ -104,7 +104,7 @@ for arg in "$@" ; do    # arg will be each positional parameter
         # Substitute fake cryptographic routines to speed simulation
         Testing=true
         NoCrypto=true
-    elif [[ ${arg} == "-fearchange" ]]; then
+    elif [[ ${arg} == "-gearchange" ]]; then
         # Test for changing UniPro gear change
         Testing=true
         GearChangeTest=true

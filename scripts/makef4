@@ -175,7 +175,7 @@ if ! $Production; then
         export _NOCRYPTO=1
     fi
     if $GearChangeTest; then
-        export _CLEAR_MIN_MEMORY=1
+        export _GEAR_CHANGE_TEST=1
     fi
     if $NoDelay; then
         export _DISABLE_TIME_CONSUMING_DELAY=1

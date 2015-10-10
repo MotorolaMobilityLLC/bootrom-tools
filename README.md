@@ -147,10 +147,70 @@ image names being ornamented with the build mode.
 * **makeboot** (called from makeall) compiles the bootrom with the desired
   configuration, creating an ornamented bootrom-xxx.bin
 * **bootsuffix** is a utility which generates the ornamentation string, used
-  in various places in the above tools
-* **make3** left over from the ad-hoc days, this builds the FFFF
-  and the bootrom in the desired configuration.
+in various places in the above tools
+      
+In addition, there are a few extra scripts which can simplify building
+stock versions for development testing. These tend to be wrappers around
+some of the above-mentioned tools, with most of the boilerplate parameters
+hardwired.
+
+* **make3** left over from the ad-hoc days, but still useful for building
+test images, this builds the FFFF and the bootrom in the desired
+configuration.
 * **make3sim** A wrapper for make3 which builds an fpga image equivalent to
   that generated with the old _SIMULATION flag.
-* **makef4norm** is a wrapper for makef4 akin to the current _SIMULATION mode
-      (this saves having to enter a squillion parameters to make4)
+* **makef4norm** is a wrapper for makef4, which generates an FFFF.bin
+akin to that obtained by the current/previous _SIMULATION flag.
+
+All of the above tools share a common set of parameters, with each tool
+using a large subset of the whole.
+
+##  Parameters
+### General Parameters
+* **-es2tsb, -es3tsb, -fpgatsb** Select the build target chip.
+If omitted, it will try to use the environment variable
+**CONFIG_CHIP**, which should be one of these, without the leading dash.
+* **-sign** Sign the L2FW and L3FW (generates "ffff-sgn.bin" instead of
+"ffff.bin")
+* **-dbg** Compile with debugging symbols and compiler options
+* **-v** Verbose mode on TFTF creation
+* **-prod** Enable _PRODUCTION mode for all 3 firmware levels.
+This disables all test parameters and forces a non-debug build.()
+* **-justboot** Normally, makeall will clear the drop folder before
+updating it with the server, bootrom, FFFF images and all the rest of
+the test suite files. Since the server and FFFF images need only be
+built once, and because makeall is called by makedrop for each of the 
+bootrom images, -justboot is set on all but the first invocation, which
+speeds the generation of the drop and prevents the bootrom builds from
+unnecessary recompilation.
+* **-zip** Tells makeall to generate a zip archive of the (interim) drop folder.
+
+### TESTING parameters
+* **-nocrypto** Substitute fake cryptographic routines to speed simulation
+* **-gearchange"** Test for changing UniPro gear change* **
+* **-debugmsg** Allow debug serial output
+* **-handshake** GPIO handshake with simulation/test controller
+* **-stby** Enable standby-mode tesing
+* **-stby-wait-svr** Will wait for the server in standby mode
+* **-stby-gbboot** Enable GBBoot server standby mode
+* **-spec `<num>`** Compile special test number `<num>`.
+(This appears to the code as the _SPECIAL_TEST define, the value
+* **-342** Substitute the L3FW for L2FW to speed simulation.
+
+### Parameter Sets by Tool
+* **makedrop** {-v} {-342}
+* **makeall** {-es2tsb | -es3tsb | -fpgatsb } {-v} {-justboot} {-zip}
+{-nocrypto} {-gearchange} {-debugmsg} {-handshake}
+{-stby} {-stby-wait-svr} {-stby-gbboot} {-spec `<num>`} {-342}
+{-justboot}
+* **makeboot** {-es2tsb | -es3tsb | -fpgatsb } {-v} {-dbg} {-prod}
+{-nocrypto} {-gearchange} {-debugmsg} {-handshake}
+{-stby} {-stby-wait-svr} {-stby-gbboot} {-spec `<num>`} {-342}
+* **makef4** {-es2tsb | -es3tsb | -fpgatsb } {-sign} {-v} {-dbg} {-prod}
+{-nocrypto} {-gearchange} {-debugmsg} {-handshake}
+{-stby} {-stby-wait-svr} {-stby-gbboot} {-spec `<num>`} {-342}
+* **makef4norm** {-es2tsb | -es3tsb | -fpgatsb } {-sign} {-v}
+{-handshake} {-stby} {-stby-wait-svr} {-stby-gbboot} {-spec `<num>`} {-342}
+* **make3sim** {-es2tsb | -es3tsb | -fpgatsb } {-sign} {-dbg} {-v} {-prod}
+{-spec `<num>`} {-342}
+
