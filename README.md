@@ -129,18 +129,28 @@ written for testing purposes.
 The bootrom-toools/scripts folder contains a number of tools to build
 variants of the FFFF and bootrom images, with the bootrom
 image names being ornamented with the build mode.
-    - makedrop builds all the variants, generates the test scripts, all FFFF
-      variants, etc. and packages it all into a zipped tar.
-    - makeall (called from makedrop) compiles the server, FFFF and bootrom for
-      a specific configuration.
-    - makef4 (called from makeall) compiles the L2FW and L3FW with the desired
-      configuration and creates the FFFF.bin. It has an option to compile only
-      L3FW and load it as L2FW to speed simulation.
-    - makeboot (called from makeall) compiles the bootrom with the desired
-      configuration, creating an ornamented bootrom-xxx.bin
-    - bootsuffix is a utility which generates the ornamentation string, used
-      in various places in the above tools
-    - make3 (deprecated) left over from the ad-hoc days, this builds the FFFF
-      and the bootrom in the desired configuration.
-    - makef4norm is a wrapper for makef4 akin to the current _SIMULATION mode
+
+* **makedelivery** builds a **delivery** drop consisting of the source and
+  tools trees, and the production compilation of the bootrom. The latter
+  includes the .bin, .bitcount (count of 1's in .bin), and .dat (special
+  hex dump of .bin) for the AP and GP bridges. Both .bin files are padded
+  with 0xffffffff to a fixed 16k length, and the last 8 bytes are a
+  serial number indicating the creation date and an AG/GP bridge flag.
+* **makedrop** builds a **test** drop. It builds all the variants, generates the
+  test scripts, all FFFF variants, etc. and packages it all into a zipped
+  tar.
+* **makeall** (called from makedrop) compiles the server, FFFF and bootrom for
+  a specific configuration.
+* **makef4** (called from makeall) compiles the L2FW and L3FW with the desired
+  configuration and creates the FFFF.bin. It has an option to compile only
+  L3FW and load it as L2FW to speed simulation.
+* **makeboot** (called from makeall) compiles the bootrom with the desired
+  configuration, creating an ornamented bootrom-xxx.bin
+* **bootsuffix** is a utility which generates the ornamentation string, used
+  in various places in the above tools
+* **make3** left over from the ad-hoc days, this builds the FFFF
+  and the bootrom in the desired configuration.
+* **make3sim** A wrapper for make3 which builds an fpga image equivalent to
+  that generated with the old _SIMULATION flag.
+* **makef4norm** is a wrapper for makef4 akin to the current _SIMULATION mode
       (this saves having to enter a squillion parameters to make4)

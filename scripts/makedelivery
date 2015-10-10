@@ -31,10 +31,9 @@
 # tar.gz drop file.
 #
 # Usage:
-#    makedelivery {-v} {-342}
+#    makedelivery {-v}
 #
-#    -v                  Verbose mode on TFTF creation
-#    -342      Substitute the L3FW for L2FW to make simulation quicker
+#    -v	Verbose mode on TFTF creation
 #------------------------------------------------------------------------------
 BuildRoot=~/work/bootrom
 BuildDir=~/work/bootrom/build
@@ -49,9 +48,6 @@ Ornamentation=$(bootsuffix $*)
 for arg in "$@" ; do    # arg will be each positional parameter
     if [[ ${arg} == "-v" ]]; then       # TFTF verbose mode
         Verbose=${arg}
-    elif [[ ${arg} == "-342" ]]; then
-        # Substitute the L3FW for L2FW to make simulation quicker
-        Subst342=${arg}
     else
         echo "Makeall: unknown arg $arg"
         exit 1
@@ -88,6 +84,7 @@ cp $BuildDir/bromcAP.dat $DropDir
 cp $BuildDir/bromcGP.bin $DropDir
 cp $BuildDir/bromcGP.bitcount $DropDir
 cp $BuildDir/bromcGP.dat $DropDir
+# NB. Awaiting confirmation on whether or not the hex file needs to be included
 #cp $BuildDir/bootrom.hex $DropDir/bootrom$Ornamentation.hex
 
 # Copy the source and tools trees into the drop folder and remove any
