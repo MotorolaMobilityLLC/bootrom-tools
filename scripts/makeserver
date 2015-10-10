@@ -30,11 +30,10 @@
 # Make the GBFW server.
 #
 # Usage:
-#    make3 {-es2tsb | -es3tsb | -fpgatsb } {-prod} {-gearchange}
+#    make3 {-es2tsb | -es3tsb | -fpgatsb } {-gearchange}
 #
 #    -es2tsb, -es3tsb, -fpgatsb
 #			Select the build target
-#    -prod		Enable _PRODUCTION mode for all 3 firmware levels
 #    -gearchange	Test for changing UniPro gear change
 #------------------------------------------------------------------------------
 BuildRoot=~/work/bootrom
@@ -71,11 +70,6 @@ export BUILD_FOR_GBBOOT_SERVER=1
 if $GearChangeTest; then
     export _GEAR_CHANGE_TEST=1
 fi
-if $Production; then
-    export _PRODUCTION=1
-else
-    export _PRODUCTION=0
-fi
 
 
 
@@ -84,7 +78,13 @@ fi
 #-----
 echo "Make the GBBOOT server..."
 make clean
-make gbboot_server
+if $Production; then
+    echo BUILD_FOR_GBBOOT_SERVER=1 _PRODUCTION=1 make gbboot_server
+    BUILD_FOR_GBBOOT_SERVER=1 _PRODUCTION=1 make gbboot_server
+else
+    echo BUILD_FOR_GBBOOT_SERVER=1 make gbboot_server
+    BUILD_FOR_GBBOOT_SERVER=1 make gbboot_server
+fi
 pushd $BuildDir
 mv bootrom.bin "gbboot_server.bin"
 if [ -f bootrom.hex ]; then
