@@ -222,7 +222,7 @@ make clean
 make third_stage
 if [[ $? == 0 ]]; then
     # s3fw tftf
-    create-tftf --elf $BuildDir/bootrom --start 0x10000000 \
+    create-tftf --elf $BuildDir/bootrom \
                 --name third --out $BinDir/third.bin --ara-pid 0 --ara-vid 0 $Verbose
     if [[ $? == 0 ]]; then
         # Sign s3fw
