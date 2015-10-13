@@ -9,9 +9,9 @@ hibernate entered
 Try to exit hibernate
 hibernate exit
 Resumed from standby
-IMS reads NOT all zero
-CMS reads NOT all zero
+IMS reads all zero
+CMS reads all zero
 Try to enable access to IMS/CMS
-IMS reads NOT all zero after trying to enable access
-CMS reads NOT all zero after trying to enable access
+IMS reads all zero after trying to enable access
+CMS reads all zero after trying to enable access
 
