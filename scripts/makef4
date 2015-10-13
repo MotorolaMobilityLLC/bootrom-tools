@@ -166,6 +166,12 @@ if ! $Production; then
     if $Testing; then
         export _TESTING=1
     fi
+    if $DebugMessages; then
+        export _DBGPRINT=1
+    fi
+    if $DebugMode; then
+        export _DEBUG_MODE=1
+    fi
     if $NoCrypto; then
         export _NOCRYPTO=1
     fi
