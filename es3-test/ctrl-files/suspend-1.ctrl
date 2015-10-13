@@ -1,0 +1,33 @@
+1. Simulator starts the Bridge and releases from RESET, running Boot ROM
+2. Boot ROM checks BootRet_o and determines that this is not a Resume
+3. Boot ROM looks for a stage 2 image in the SPI flash
+4. Boot ROM finds standby-test-s2 image, loads it, and transfers to it
+5. standby-test-s2 reports startup (by UART message)
+6. standby-test-s2 uses GPIO to signal test controller it will be entering Standby
+     - Test controller waits for a reasonable interval for entry to Standby (maybe 1-2 ms?)
+7. standby-test-s2 saves CPU registers in Work RAM (like a function call)
+8. standby-test-s2 sets WAKEUPSRC to accept a wakeup interrupt from some GPIO line
+     - It expects the Test Controller to toggle the GPIO line after a delay
+     - Which GPIO line should be used?
+     - How long should this delay be? Is this something that the Test Controller can do?
+9. standby-test-s2 copies configures PwrOffCnt and PwrOnCnt
+     - What values should be used in the simulation environment?
+10. standby-test-s2 copies the code for the steps in section 4.1.4.4 to Buffer RAM
+11. standby-test-s2 transfers to the copied code in Buffer RAM
+12. The copied code performs the software steps (1-17) defined in section 4.1.4.4
+     - Except it does not change the UniPro link state and does not perform step 8
+     - This assumes that we can move that step, as requested in ENG-453.
+13. The hardware enters Standby mode after the PwrOffCnt delay
+14. After a delay (#6 above), the Test Controller toggles the GPIO wakeup line
+15. The hardware resumes from Standby and after completing a RESET, the CPU transfers to the Boot ROM
+16. Boot ROM checks BootRet_o and recognizes that it is Resuming from Standby
+17. Boot ROM performs all the software steps (8 to 24) of section 4.1.4.4
+     - All this code is in the Boot ROM
+18. Boot ROM restores CPU registers saved earlier in Work RAM
+19. Boot ROM transfers back to standby-test-s2 in Work RAM (like returning from a function call)
+20. standby-test-s2 reports success (UART message)
+21. standby-test-s2 signals completion of the test (by GPIO)
+
+Note: All test images support suspend/resume test in stage 3 firmware. ffff.bin or ffff-sgn.bin
+can be used for the S/R test.
+

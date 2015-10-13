@@ -1,0 +1,2 @@
+Use the steps from suspend-1.ctrl, but with the following precondition:
+- Set or clear jtag_enable as desired on the bridge before starting the bootrom.
