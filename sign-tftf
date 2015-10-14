@@ -56,8 +56,18 @@ def validate_args(args):
         error("Too many TFTF files to sign")
         return False
 
-    if not args.key:
-        error("No key file specified")
+    num_key_params = 0
+    if args.key:
+        num_key_params += 1
+    if args.testkey:
+        num_key_params += 1
+    if args.realkey:
+        num_key_params += 1
+    if num_key_params < 1:
+        error("No key file specified, use -tk, -rk, or -key")
+        return False
+    elif num_key_params > 1:
+        error("Too many key file types, use only 1 of -tk, -rk, or -key")
         return False
 
     if not args.type:
@@ -130,9 +140,18 @@ def main():
     parser = argparse.ArgumentParser()
 
     # Flags args
-    parser.add_argument("-v", "--verbose",
+    parser.add_argument("--verbose", "-v",
                         action='store_true',
                         help="Display the signed TFTF header when done")
+
+    parser.add_argument("--testkey", "-tk",
+                        action='store_true',
+                        help="Sign using the official test key")
+
+    parser.add_argument("--realkey", "-rk",
+                        action='store_true',
+                        help="Sign using the official production key")
+
 
     # String/file args
     parser.add_argument("--key",
