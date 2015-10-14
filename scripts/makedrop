@@ -79,8 +79,8 @@ StdQuiet="-es3tsb -nocrypto -handshake $Subst342 $Verbose $StdSim"
 # Standard version for HAPS FPGA (opt-crypto-uart-hs)
 StdFpga="-fpgatsb -nocrypto -debugmsg -handshake $Subst342 $Verbose $StdSim"
 
-# Standard version for HAPS FPGA, c/w symbols" (debug-crypto-uart-hs)
-StdFpgaSym="-fpgatsb -dbg -debugmsg -handshake $Subst342 $Verbose $StdSim"
+# Standard version for HAPS FPGA, c/w debug symbols" (debug-crypto-uart-hs)
+StdFpgaDbg="-fpgatsb -dbg -debugmsg -handshake $Subst342 $Verbose $StdSim"
 
 # Specially instrumented for fault induction on simulator only, and noisy besides (opt-nc-uart-spec-##)
 #***** TBD *****
@@ -91,8 +91,8 @@ StdFpgaSym="-fpgatsb -dbg -debugmsg -handshake $Subst342 $Verbose $StdSim"
 #-----
 # Lists of build targets and names
 #-----
-Targets=("$StdNoisy" "$StdProd" "$StdQuiet" "$StdFpga" "$StdFpgaSym")
-TargetNames=("StdNoisy" "StdProd" "StdQuiet" "StdFpga" "StdFpgaSym")
+Targets=("$StdNoisy" "$StdProd" "$StdQuiet" "$StdFpga" "$StdFpgaDbg")
+TargetNames=("StdNoisy" "StdProd" "StdQuiet" "StdFpga" "StdFpgaDbg")
 
 
 
@@ -100,7 +100,6 @@ TargetNames=("StdNoisy" "StdProd" "StdQuiet" "StdFpga" "StdFpgaSym")
 # Make all the canonical builds
 #-----
 First=false
-#for i in "${Targets[@]}"
 for ((i=0; i<${#Targets[*]}; i++));
 do
     params=${Targets[i]}
@@ -116,7 +115,7 @@ do
     if [[ $? == 0 ]]; then
         echo "Built bootrom: $name"
     else
-        echo "Problems building bootrom: $name"
+        echo "Problems building bootrom config: $name"
         exit 1
     fi
 done
