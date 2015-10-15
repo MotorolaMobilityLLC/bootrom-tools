@@ -31,10 +31,9 @@
 # tar.gz drop file.
 #
 # Usage:
-#    makedrop {-v} {-342}
+#    makedrop {-v}
 #
 #    -v                  Verbose mode on TFTF creation
-#    -342      Substitute the L3FW for L2FW to make simulation quicker
 #------------------------------------------------------------------------------
 BuildRoot=~/work/bootrom
 BuildDir=~/work/bootrom/build
@@ -52,14 +51,14 @@ NonDbgDir=es3-test-nodbg
 for arg in "$@" ; do    # arg will be each positional parameter
     if [[ ${arg} == "-v" ]]; then       # TFTF verbose mode
         Verbose=${arg}
-    elif [[ ${arg} == "-342" ]]; then
-        # Substitute the L3FW for L2FW to make simulation quicker
-        Subst342=${arg}
     else
         echo "Makeall: unknown arg $arg"
         exit 1
     fi
 done
+
+# Substitute the L3FW for L2FW to make simulation quicker
+Subst342="-342"
 
 StdSim="-nodelay -stby -stby-wait-svr -stby-gbboot"
 
