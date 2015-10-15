@@ -31,9 +31,10 @@
 # tar.gz drop file.
 #
 # Usage:
-#    makedrop {-v}
+#    makedrop {-v} --rev=<revision>
 #
 #    -v                  Verbose mode on TFTF creation
+#    --rev=<revision>    The revision in git to build the boot ROM code
 #------------------------------------------------------------------------------
 BuildRoot=~/work/bootrom
 BuildDir=~/work/bootrom/build
@@ -44,13 +45,15 @@ DropDir=~/es3-test
 DbgDir=es3-test-dbg
 NonDbgDir=es3-test-nodbg
 
-
+REV=
 #-----
 # Process any args
 #-----
 for arg in "$@" ; do    # arg will be each positional parameter
     if [[ ${arg} == "-v" ]]; then       # TFTF verbose mode
         Verbose=${arg}
+    elif [[ ${arg} == --rev=* ]]; then
+        REV="${arg#*=}"
     else
         echo "Makeall: unknown arg $arg"
         exit 1
@@ -59,6 +62,12 @@ done
 
 # Substitute the L3FW for L2FW to make simulation quicker
 Subst342="-342"
+
+if [ "${REV}" == "" ]; then
+    echo "You have to specify a revision to build the boot ROM code"
+    echo "Usage: $(basename $0) --rev=<revision> [-v]"
+    exit 1
+fi
 
 StdSim="-nodelay -stby -stby-wait-svr -stby-gbboot"
 
@@ -106,10 +115,10 @@ do
     echo "making: $i ($name): $params"
     if ! $First; then
         # The first time, we first clear the drop folder
-        makeall $params $Verbose $Subst342
+        makeall $params $Verbose $Subst342 --rev=${REV}
         First=true
     else
-        makeall $params -justboot $Verbose $Subst342
+        makeall $params -justboot $Verbose $Subst342 --rev=${REV}
     fi
     if [[ $? == 0 ]]; then
         echo "Built bootrom: $name"

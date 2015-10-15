@@ -32,7 +32,8 @@
 # Usage:
 #    makeboot {-es2tsb | -es3tsb | -fpgatsb } {-v} {-dbg} \
 #          {-nocrypto} {-gearchange} {-nodelay} {-debugmsg} {-handshake} \
-#          {-stby} {-stby-wait-svr} {-stby-gbboot} {-spec <num>} {-342}
+#          {-stby} {-stby-wait-svr} {-stby-gbboot} {-spec <num>} {-342} \
+#          --rev=<revision>
 #
 #    -es2tsb, -es3tsb, -fpgatsb
 #              Select the build target
@@ -52,6 +53,7 @@
 #    -stby-gbboot	Enable GBBoot server standby mode
 #    -spec <num>	Compile special test number `<num>`.
 #    -342		Substitute the L3FW for L2FW to speed simulation
+#    --rev=<revision>    The revision in git to build the boot ROM code
 #------------------------------------------------------------------------------
 BuildRoot=~/work/bootrom
 BuildDir=~/work/bootrom/build
@@ -76,6 +78,7 @@ Subst342=false
 SpecialTest=false
 HaveSpecialTest=false
 SpecialTest=false
+REV=
 for arg in "$@" ; do    # arg will be each positional parameter
     if $SpecialTest; then
         # The previous arg was "-spec", so pick up the special test no.
@@ -134,11 +137,19 @@ for arg in "$@" ; do    # arg will be each positional parameter
     elif [[ ${arg} == "-342" ]]; then
         # Substitute the L3FW for L2FW to speed simulation
         Subst342=true
+    elif [[ ${arg} == --rev=* ]]; then
+        REV="${arg#*=}"
     else
         echo "make3: unknown arg $arg"
         exit 1
     fi
 done
+
+if [ "${REV}" == "" ]; then
+    echo "You have to specify a revision to build the boot ROM code"
+    echo "Usage: $(basename $0) --rev=<revision> [-v]"
+    exit 1
+fi
 
 # Fill in missing chip
 if [ ! $CONFIG_CHIP ]; then
@@ -194,6 +205,12 @@ fi
 
 pushd $BuildRoot
 
+git checkout ${REV}
+if [ $? != 0 ]; then
+    echo "No revision "${REV}" in "${BuildRoot}
+    exit 1
+fi
+
 # Configure for a specific chip/target
 echo "Building for $CONFIG_CHIP"
 ./configure ${CONFIG_CHIP}
@@ -211,6 +228,9 @@ fi
 echo "Make 1st stage FW (BootRom)..."
 make clean
 make
+
+git checkout master
+
 if [[ $? != 0 ]]; then
     echo "Problems creating s1fw"
     popd

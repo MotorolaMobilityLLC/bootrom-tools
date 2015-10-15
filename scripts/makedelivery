@@ -31,9 +31,10 @@
 # tar.gz drop file.
 #
 # Usage:
-#    makedelivery {-v}
+#    makedelivery {-v} --rev=<revision>
 #
 #    -v	Verbose mode on TFTF creation
+#    --rev=<revision>    The revision in git to build the boot ROM code
 #------------------------------------------------------------------------------
 BuildRoot=~/work/bootrom
 BuildDir=~/work/bootrom/build
@@ -41,23 +42,30 @@ DeliveryName=es3-bootrom-delivery
 DropDir=~/$DeliveryName
 Ornamentation=$(bootsuffix $*)
 
-
+REV=
 #-----
 # Process any args
 #-----
 for arg in "$@" ; do    # arg will be each positional parameter
     if [[ ${arg} == "-v" ]]; then       # TFTF verbose mode
         Verbose=${arg}
+    elif [[ ${arg} == --rev=* ]]; then
+        REV="${arg#*=}"
     else
         echo "Makeall: unknown arg $arg"
         exit 1
     fi
 done
 
+if [ "${REV}" == "" ]; then
+    echo "You have to specify a revision to build the boot ROM code"
+    echo "Usage: $(basename $0) --rev=<revision> [-v]"
+    exit 1
+fi
 
 # Make the real thing: no extraneous support for testing (opt-crypto-quiet)
 echo "Making the bootrom image"
-makeboot -es3tsb
+makeboot -es3tsb --rev=${REV}
 if [[ $? != 0 ]]; then
     echo "Problems making the delivery bootrom"
     exit 1
@@ -91,6 +99,9 @@ cp $BuildDir/bromcGP.dat $DropDir
 # hidden git or reviewboard files.
 echo "Copying the source tree to $DropDir"
 git clone https://github.com/projectara/bootrom
+pushd bootrom
+git checkout ${REV}
+popd
 rm -rf bootrom/.git* bootrom/.reviewboardrc
 
 echo "Copying the tools tree to $DropDir"

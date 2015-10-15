@@ -33,7 +33,7 @@
 # Usage:
 #    makeall {-es2tsb | -es3tsb | -fpgatsb } {-v} {-justboot} {-zip} \
 #          {-nocrypto} {-gearchange} {-nodelay} {-debugmsg} {-handshake} \
-#          {-stby} {-stby-wait-svr} {-stby-gbboot} {-342}
+#          {-stby} {-stby-wait-svr} {-stby-gbboot} {-342} --rev=<revision>
 #
 #    -es2tsb, -es3tsb, -fpgatsb
 #		Select the build target
@@ -60,6 +60,7 @@
 #    -stby-gbboot	Enable GBBoot server standby mode
 #    -spec <num>	Compile special test number `<num>`.
 #    -342		Substitute the L3FW for L2FW to speed simulation
+#    --rev=<revision>    The revision in git to build the boot ROM code
 #------------------------------------------------------------------------------
 BuildRoot=~/work/bootrom
 BuildDir=~/work/bootrom/build
@@ -77,6 +78,7 @@ HandshakeSuffix=""
 DbgModeSuffix="-opt"
 Ornamentation=$(bootsuffix $*)
 
+REV=
 #-----
 # Process args
 #-----
@@ -137,11 +139,19 @@ for arg in "$@" ; do    # arg will be each positional parameter
     elif [[ ${arg} == "-342" ]]; then
         # Substitute the L3FW for L2FW to make simulation quicker
         Subst342="${arg} "
+    elif [[ ${arg} == --rev=* ]]; then
+        REV="${arg#*=}"
     else
         echo "Makeall: unknown arg $arg"
         exit 1
     fi
 done
+
+if [ "${REV}" == "" ]; then
+    echo "You have to specify a revision to build the boot ROM code"
+    echo "Usage: $(basename $0) --rev=<revision> [-v]"
+    exit 1
+fi
 
 # Fill in missing chip
 if [ ! $CONFIG_CHIP ]; then
@@ -264,7 +274,7 @@ fi
 echo "--"
 echo "Building the Trusted (signed) image"
 echo "--"
-makeboot $StdArgs
+makeboot $StdArgs --rev=${REV}
 if [[ $? == 0 ]]; then
     mv $BuildDir/bootrom.bin $AssyDir/s1fw/bootrom$Ornamentation.bin
     if [ -f $BuildDir/bootrom.hex ]; then
