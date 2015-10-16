@@ -206,11 +206,11 @@ fi
 
 # Compose the bulk of our "makef4 and "makeboot" arguments
 F4Args="-$CONFIG_CHIP $Production -dbg -nocrypto -debugmsg -handshake "
-F4Args="$F4Args$GearChangeTest$NoDelay$Subst342$Verbose"
+F4Args="$F4Args$GearChangeTest$NoDelay$DmeLogging$Subst342$Verbose"
 F4Args="$F4Args$StandbyTest$StandbyWaitForServer$GBBootServerStandby"
 StdArgs="-$CONFIG_CHIP $NoCrypto$GearChangeTest$NoDelay$DebugMessages$DbgMode"
 StdArgs="$StdArgs$StandbyTest$StandbyWaitForServer$GBBootServerStandby"
-StdArgs="$StdArgs$ProductionS$DmeLogging$Subst342$Verbose"
+StdArgs="$StdArgs$Production$DmeLogging$Subst342$Verbose"
 if $HaveSpecialTest; then
     StdArgs="$StdArgs-spec $SpecialTestNum"
 else

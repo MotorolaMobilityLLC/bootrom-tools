@@ -142,7 +142,7 @@ for arg in "$@" ; do    # arg will be each positional parameter
         Testing=true
         GBBootServerStandby=true
     elif [[ ${arg} == "-dme" ]]; then
-        # Capture DME writes to dbgserial 
+        # Capture DME writes to dbgserial
         DmeLogging=true
     elif [[ ${arg} == "-342" ]]; then
         # Substitute the L3FW for L2FW to speed simulation
