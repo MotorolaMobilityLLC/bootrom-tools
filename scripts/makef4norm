@@ -32,7 +32,7 @@
 # Usage:
 #    makef4norm {-es2tsb | -es3tsb | -fpgatsb } {-sign} {-v} \
 #               {-handshake} {-stby} {-stby-wait-svr} {-stby-gbboot} \
-#               {-gearchange} {-spec `<num>`} {-342}
+#               {-gearchange} {-spec `<num>`} {-dme} {-342}
 #
 #    -es2tsb, -es3tsb, -fpgatsb
 #              Select the build target
@@ -47,6 +47,7 @@
 #    -stby-gbboot	Enable GBBoot server standby mode
 #    -gearchange	Test for changing UniPro gear change
 #    -spec <num>	Compile special test number `<num>`.
+#    -dme               Enable DME-write logging
 #    -342		Substitute the L3FW for L2FW to speed simulation
 #------------------------------------------------------------------------------
 BuildRoot=~/work/bootrom
@@ -127,6 +128,9 @@ for arg in "$@" ; do    # arg will be each positional parameter
         # Test for changing UniPro gear change
         Testing=true
         GearChangeTest="${arg} "
+    elif [[ ${arg} == "-dme" ]]; then
+        # Capture DME writes to dbgserial
+        DmeLogging=${arg}
     elif [[ ${arg} == "-342" ]]; then
         # Substitute the L3FW for L2FW to speed simulation
         Subst342=${arg}
@@ -154,6 +158,6 @@ fi
 
 
 makef4 -$CONFIG_CHIP -dbg -nocrypto $GearChangeTest -nodelay -debugmsg -handshake $Verbose \
-        $Sign $Subst342 \
+        $Sign $DmeLogging $Subst342 \
        -stby -stby-wait-svr -stby-gbboot
 

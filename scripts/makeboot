@@ -32,7 +32,7 @@
 # Usage:
 #    makeboot {-es2tsb | -es3tsb | -fpgatsb } {-v} {-dbg} \
 #          {-nocrypto} {-gearchange} {-nodelay} {-debugmsg} {-handshake} \
-#          {-stby} {-stby-wait-svr} {-stby-gbboot} {-spec <num>} {-342} \
+#          {-stby} {-stby-wait-svr} {-stby-gbboot} {-spec <num>} {-dme} {-342} \
 #          --rev=<revision>
 #
 #    -es2tsb, -es3tsb, -fpgatsb
@@ -40,6 +40,7 @@
 #    -dbg      Compile with debugging symbols and compiler options
 #    -v        Verbose mode on TFTF creation
 #    -prod     Enable _PRODUCTION mode for all 3 firmware levels
+#    --rev=<revision>    The revision in git to build the boot ROM code
 #
 # TESTING parameters:
 #    -nocrypto		Substitute fake cryptographic routines to speed
@@ -52,8 +53,8 @@
 #    -stby-wait-svr	Will wait for the server in standby mode
 #    -stby-gbboot	Enable GBBoot server standby mode
 #    -spec <num>	Compile special test number `<num>`.
+#    -dme               Enable DME-write logging
 #    -342		Substitute the L3FW for L2FW to speed simulation
-#    --rev=<revision>    The revision in git to build the boot ROM code
 #------------------------------------------------------------------------------
 BuildRoot=~/work/bootrom
 BuildDir=~/work/bootrom/build
@@ -74,6 +75,7 @@ Handshake=false
 StandbyTest=false
 StandbyWaitForServer=false
 GBBootServerStandby=false
+DmeLogging=false
 Subst342=false
 SpecialTest=false
 HaveSpecialTest=false
@@ -134,6 +136,9 @@ for arg in "$@" ; do    # arg will be each positional parameter
         # Enable GBBoot server standby mode
         Testing=true
         GBBootServerStandby=true
+    elif [[ ${arg} == "-dme" ]]; then
+        # Capture DME writes to dbgserial
+        DmeLogging=true
     elif [[ ${arg} == "-342" ]]; then
         # Substitute the L3FW for L2FW to speed simulation
         Subst342=true
@@ -196,6 +201,9 @@ if ! $Production; then
     fi
     if $GBBootServerStandby; then
         export _GBBOOT_SERVER_STANDBY=1
+    fi
+    if $DmeLogging; then
+        export _DME_LOGGING=1
     fi
     if $HaveSpecialTest; then
         export _SPECIAL_TEST=$SpecialTestNum

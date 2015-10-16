@@ -32,7 +32,7 @@
 #
 # Usage:
 #    make3sim {-es2tsb | -es3tsb | -fpgatsb } {-sign} {-v} {-prod}\
-#             {-gearchange} {-342} --rev=<revision>
+#             {-gearchange} {-dme} {-342} --rev=<revision>
 #
 #    -v        Verbose mode on TFTF creation
 #    -prod     Enable _PRODUCTION mode for all 3 firmware levels
@@ -43,6 +43,7 @@
 # TESTING parameters:
 #    -gearchange	Test for changing UniPro gear change
 #    -spec <num>	Compile special test number `<num>`.
+#    -dme               Enable DME-write logging
 #    -342		Substitute the L3FW for L2FW to speed simulation
 #    --rev=<revision>    The revision in git to build the boot ROM code
 #------------------------------------------------------------------------------
@@ -76,6 +77,9 @@ for arg in "$@" ; do    # arg will be each positional parameter
         CONFIG_CHIP="fpgatsb"
     elif [[ ${arg} == "-v" ]]; then       # TFTF verbose mode
         Verbose=${arg}
+    elif [[ ${arg} == "-dme" ]]; then
+        # Capture DME writes to dbgserial
+        DmeLogging=${arg}
     elif [[ ${arg} == "-342" ]]; then
         # Substitute the L3FW for L2FW to speed simulation
         Subst342=${arg}
@@ -105,10 +109,10 @@ fi
 if $HaveSpecialTest; then
     make3 -$CONFIG_CHIP -nocrypto -nodelay -debugmsg -handshake \
           -stby -stby-wait-svr -stby-gbboot $GearChangeTest $Sign \
-          $DbgMode $Production $Subst342 -spec $SpecialTestNum $REV
+          $DbgMode $Production $DmeLogging $Subst342 -spec $SpecialTestNum $REV
 else
     make3 -$CONFIG_CHIP -nocrypto -nodelay -debugmsg -handshake \
           -stby -stby-wait-svr -stby-gbboot $GearChangeTest $Sign \
-          $DbgMode $Production $Subst342 $REV
+          $DbgMode $Production $DmeLogging $Subst342 $REV
 fi
 

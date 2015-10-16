@@ -31,10 +31,11 @@
 # tar.gz drop file.
 #
 # Usage:
-#    makedrop {-v} --rev=<revision>
+#    makedrop {-v} {-dme} --rev=<revision>
 #
 #    -v                  Verbose mode on TFTF creation
 #    --rev=<revision>    The revision in git to build the boot ROM code
+#    -dme                Enable DME-write logging
 #------------------------------------------------------------------------------
 BuildRoot=~/work/bootrom
 BuildDir=~/work/bootrom/build
@@ -52,6 +53,9 @@ REV=
 for arg in "$@" ; do    # arg will be each positional parameter
     if [[ ${arg} == "-v" ]]; then       # TFTF verbose mode
         Verbose=${arg}
+    elif [[ ${arg} == "-dme" ]]; then
+        # Capture DME writes to dbgserial
+        DmeLogging=${arg}
     elif [[ ${arg} == --rev=* ]]; then
         REV="${arg#*=}"
     else
@@ -78,17 +82,17 @@ StdSim="-nodelay -stby -stby-wait-svr -stby-gbboot"
 StdProd="-es3tsb $Subst342 $Verbose"
 
 # Noisy version for Simulation - slower, but easier to analyze (opt-nc-uart-hs)
-StdNoisy="-es3tsb -nocrypto -debugmsg -handshake $Subst342 $Verbose $StdSim"
+StdNoisy="-es3tsb -nocrypto -debugmsg -handshake $Subst342 $Verbose $StdSim $DmeLogging"
 
 # Quiet version for Simulator, used once we no longer need the noisy version
 # to help analyze tests (opt-nc-quiet-hs)
 StdQuiet="-es3tsb -nocrypto -handshake $Subst342 $Verbose $StdSim"
 
 # Standard version for HAPS FPGA (opt-crypto-uart-hs)
-StdFpga="-fpgatsb -nocrypto -debugmsg -handshake $Subst342 $Verbose $StdSim"
+StdFpga="-fpgatsb -nocrypto -debugmsg -handshake $Subst342 $Verbose $StdSim $DmeLogging"
 
 # Standard version for HAPS FPGA, c/w debug symbols" (debug-crypto-uart-hs)
-StdFpgaDbg="-fpgatsb -dbg -debugmsg -handshake $Subst342 $Verbose $StdSim"
+StdFpgaDbg="-fpgatsb -dbg -debugmsg -handshake $Subst342 $Verbose $StdSim $DmeLogging"
 
 # Specially instrumented for fault induction on simulator only, and noisy besides (opt-nc-uart-spec-##)
 #***** TBD *****

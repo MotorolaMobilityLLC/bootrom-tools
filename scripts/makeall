@@ -33,7 +33,7 @@
 # Usage:
 #    makeall {-es2tsb | -es3tsb | -fpgatsb } {-v} {-justboot} {-zip} \
 #          {-nocrypto} {-gearchange} {-nodelay} {-debugmsg} {-handshake} \
-#          {-stby} {-stby-wait-svr} {-stby-gbboot} {-342} --rev=<revision>
+#          {-stby} {-stby-wait-svr} {-stby-gbboot} {-dme} {-342} --rev=<revision>
 #
 #    -es2tsb, -es3tsb, -fpgatsb
 #		Select the build target
@@ -48,6 +48,7 @@
 #		recompilation.
 #    -zip	Tells makeall to generate a zip archive of the (interim)
 #		drop folder.
+#    --rev=<revision>    The revision in git to build the boot ROM code
 #
 # TESTING parameters:
 #    -nocrypto		Substitute fake cryptographic routines to speed
@@ -59,8 +60,8 @@
 #    -stby-wait-svr	Will wait for the server in standby mode
 #    -stby-gbboot	Enable GBBoot server standby mode
 #    -spec <num>	Compile special test number `<num>`.
+#    -dme               Enable DME-write logging
 #    -342		Substitute the L3FW for L2FW to speed simulation
-#    --rev=<revision>    The revision in git to build the boot ROM code
 #------------------------------------------------------------------------------
 BuildRoot=~/work/bootrom
 BuildDir=~/work/bootrom/build
@@ -136,6 +137,9 @@ for arg in "$@" ; do    # arg will be each positional parameter
     elif [[ ${arg} == "-gearchange" ]]; then
         # Test for changing UniPro gear change
         GearChangeTest="${arg} "
+    elif [[ ${arg} == "-dme" ]]; then
+        # Capture DME writes to dbgserial
+        DmeLogging="${arg} "
     elif [[ ${arg} == "-342" ]]; then
         # Substitute the L3FW for L2FW to make simulation quicker
         Subst342="${arg} "
@@ -206,7 +210,7 @@ F4Args="$F4Args$GearChangeTest$NoDelay$Subst342$Verbose"
 F4Args="$F4Args$StandbyTest$StandbyWaitForServer$GBBootServerStandby"
 StdArgs="-$CONFIG_CHIP $NoCrypto$GearChangeTest$NoDelay$DebugMessages$DbgMode"
 StdArgs="$StdArgs$StandbyTest$StandbyWaitForServer$GBBootServerStandby"
-StdArgs="$StdArgs$ProductionS$Subst342$Verbose"
+StdArgs="$StdArgs$ProductionS$DmeLogging$Subst342$Verbose"
 if $HaveSpecialTest; then
     StdArgs="$StdArgs-spec $SpecialTestNum"
 else
