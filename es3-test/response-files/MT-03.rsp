@@ -1,9 +1,26 @@
+
+Hello world from s1fw
+Reset all cports.
+Unipro enabled!
+efuse_init: endpoint ID: 9abcdef012345678
+efuse_init: OK
+Boot over UniPro (06000000)
+Module ready advertised.
+Ready-poked; download-ready
+Beginning Greybus FW download.
+Finished Greybus FW download.
+UP Trusted: (07000000)
+Reset all cports.
 Hello world from s3fw
 IMS reads NOT all zero
+   33333333555555556666666699999999aaaaaaaacccccccc555533336969696935ac69
 CMS reads NOT all zero
+   262524232221201f1e1d1c1b1a191817161514131211100f
 Try to enable access to IMS/CMS
 IMS reads NOT all zero after trying to enable access
+   33333333555555556666666699999999aaaaaaaacccccccc555533336969696935ac69
 CMS reads NOT all zero after trying to enable access
+   262524232221201f1e1d1c1b1a191817161514131211100f
 Wait for hibernate
 hibernate entered
 Try to exit hibernate

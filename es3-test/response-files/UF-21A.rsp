@@ -1,6 +1,8 @@
+
 Hello world from s1fw
 Reset all cports.
 Unipro enabled!
+efuse_init: endpoint ID: 9abcdef012345678
 efuse_init: OK
 Boot from SPIROM
 L1 FFFF err: 00000041
@@ -12,4 +14,3 @@ fw_cport_handler: Greybus response, status 0x000000fe
 RX handler returned error
 Finished Greybus FW download.
 Boot failed (89000041) halt
-

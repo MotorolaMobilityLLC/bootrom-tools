@@ -1,8 +1,9 @@
+
 Hello world from s1fw
 Reset all cports.
 Unipro enabled!
+efuse_init: endpoint ID: 9abcdef012345678
 efuse_init: OK
 Boot from SPIROM
 L1 FFFF err: 00000046
 Spi boot failed (09000046), Boot over UniPro (09000046)
-

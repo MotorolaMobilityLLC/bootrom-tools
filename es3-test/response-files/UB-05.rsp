@@ -2,6 +2,7 @@
 Hello world from s1fw
 Reset all cports.
 Unipro enabled!
+efuse_init: endpoint ID: 9abcdef012345678
 efuse_init: OK
 Boot over UniPro (06000000)
 Module ready advertised.
@@ -16,14 +17,3 @@ CMS reads all zero
 Try to enable access to IMS/CMS
 IMS reads all zero after trying to enable access
 CMS reads all zero after trying to enable access
-Wait for hibernate
-hibernate entered
-Try to exit hibernate
-hibernate exit
-Resumed from standby
-IMS reads all zero
-CMS reads all zero
-Try to enable access to IMS/CMS
-IMS reads all zero after trying to enable access
-CMS reads all zero after trying to enable access
-

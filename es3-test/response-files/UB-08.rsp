@@ -4,8 +4,12 @@ Reset all cports.
 Unipro enabled!
 efuse_init: endpoint ID: 9abcdef012345678
 efuse_init: OK
-Boot from SPIROM
-SPI Trusted: (03000000)
+Boot over UniPro (06000000)
+Module ready advertised.
+Ready-poked; download-ready
+Beginning Greybus FW download.
+Finished Greybus FW download.
+UP Trusted: (07000000)
 Reset all cports.
 Hello world from s3fw
 IMS reads NOT all zero
