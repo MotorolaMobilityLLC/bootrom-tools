@@ -1,0 +1,119 @@
+#! /usr/bin/env python
+
+#
+# Copyright (c) 2015 Google Inc.
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+# 1. Redistributions of source code must retain the above copyright notice,
+# this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+# this list of conditions and the following disclaimer in the documentation
+# and/or other materials provided with the distribution.
+# 3. Neither the name of the copyright holder nor the names of its
+# contributors may be used to endorse or promote products derived from this
+# software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+# THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+# OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+# WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+# ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+
+## Tool to compare a log file against a response file
+#
+# The response file may be a subset of the log file - the intent is for it
+# to consist of salient (sub)strings to look for in the log file. The strings
+# must all be encountered in the order they are specified in the response
+# file for the test to be considered successful. The app. will exit with
+# a zero status if the test passed and a non-zero status of 2 if the test
+# failed.
+#
+
+from __future__ import print_function
+import os
+import sys
+import argparse
+
+# Program return values
+PROGRAM_SUCCESS = 0
+PROGRAM_WARNINGS = 1
+PROGRAM_ERRORS = 2
+
+
+def load_file(filename):
+    """ Load a file into a list """
+    with open(filename, "r") as f:
+        return f.readlines()
+
+
+def compare_log_to_resp(log, resp):
+    """ Search the log list for the responses in the response list
+
+    Returns true if all the strings in the response list were found in the
+    log, false otherwise.
+    """
+    response_line_no = 0
+    response_line = resp[response_line_no].rstrip()
+
+    for log_line in log:
+        log_line = log_line.rstrip()
+        if response_line in log_line:
+            # Found a match, step to the next non-blank line in the response
+            # list
+            while True:
+                response_line_no += 1
+                if response_line_no >= len(resp):
+                    # We ran through all of our respones lines, success!
+                    return None
+                else:
+                    response_line = resp[response_line_no].rstrip()
+                    if len(response_line) > 0:
+                        break
+    print("Log missing '{0:s}'".format(response_line))
+    return response_line
+
+
+def main():
+    """Mainline"""
+
+    parser = argparse.ArgumentParser()
+
+    # Capture-specific args:
+    parser.add_argument("--log",
+                        required=True,
+                        help="The name of the log file to compare")
+
+    parser.add_argument("--resp",
+                        required=True,
+                        help="The name of the response file "
+                             "to compare against")
+
+    args = parser.parse_args()
+
+    log = load_file(args.log)
+    resp = load_file(args.resp)
+    missing_response = compare_log_to_resp(log, resp)
+    if missing_response:
+        print("Log {0:s} failed: missing '{1:s}' in {2:s}".
+              format(os.path.basename(args.log), missing_response,
+                     os.path.basename(args.resp)))
+        sys.exit(PROGRAM_ERRORS)
+    else:
+        print("Log {0:s} passed rsp {1:s}".
+              format(os.path.basename(args.log), os.path.basename(args.resp)))
+        sys.exit(PROGRAM_SUCCESS)
+
+
+## Launch main
+#
+if __name__ == '__main__':
+    main()
