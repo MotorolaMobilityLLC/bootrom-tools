@@ -239,8 +239,10 @@ echo "Make 3rd stage..."
 make clean
 make third_stage
 if [[ $? == 0 ]]; then
-    # s3fw tftf
+    # s3fw tftf, fake a data section at 0x10010000, which is in the middle of workram
+    # so pretty safe to use
     create-tftf --elf $BuildDir/bootrom \
+                --data $BuildDir/bootrom.bin --load 0x10010000 \
                 --name third --out $BinDir/third.bin --ara-pid 0 --ara-vid 0 $Verbose
     if [[ $? == 0 ]]; then
         # Sign s3fw

@@ -60,10 +60,10 @@
 #    --patch copy ffff[0].element[12].type ffff[0].element[0].type 140 \
 #    --patch copy ffff[1] ffff[0] 4096
 -t FB-04 -p "Boot failed (status 82000044" \
-    --patch rep ffff[0].element[2].type 01 \
-    --patch rep ffff[0].element[2].length 00 01 \
-    --patch rep ffff[0].element[2].location 00 70 \
-    --patch rep ffff[0].element[2].generation 01 \
+    --patch rep ffff[0].element[1].type 02 \
+    --patch rep ffff[0].element[1].length 00 01 \
+    --patch rep ffff[0].element[1].location 00 70 \
+    --patch rep ffff[0].element[1].generation 01 \
     --patch copy ffff[1] ffff[0] 4096
 -t FB-05 -p "Boot failed (status 82000045" \
     --patch rep ffff[0].element[197].generation+5 01 \
@@ -74,7 +74,8 @@
     --patch copy ffff[1] ffff[0] 4096
 -t FB-08 -p "Boot failed (status 82000048" --patch rep ffff[0].image_length ff ff ff 80 \
     --patch copy ffff[1] ffff[0] 4096
--t FB-09 -p "Boot failed (status 82000049" --patch xor ffff[0].sentinel de ad be ef \
+-t FB-09 -p "Boot failed (status 8200004A" \
+    --patch rep ffff[0].element[0].type 02 \
     --patch copy ffff[1] ffff[0] 4096
 -t FB-10 -p "Boot failed (status 8200004a" \
     --patch rep ffff.element[0].2fw.section[0].type 02 \
@@ -96,16 +97,19 @@
     --patch copy ffff[1] ffff[0] 4096
 -t FB-19 -p "Boot failed (status 82000027" --patch rep ffff.element[0].2fw.unipro_product_id a6 a6 a6 a6 \
     --patch copy ffff[1] ffff[0] 4096
--t FB-20 -p "Boot failed (status 82000028" --patch rep ffff.element[0].2fw.section[0].type 03 \
+-t FB-20 -p "Boot failed (status 82000028" --patch rep ffff.element[0].2fw.section[1].type 03 \
     --patch copy ffff[1] ffff[0] 4096
 -t FB-21 -p "Boot failed (status 8200002a" \
+    --patch rep ffff.element[0].2fw.section[2].type 80 \
+    --patch rep ffff.element[0].2fw.section[2].load_address ff ff ff ff \
     --patch rep ffff.element[0].2fw.section[3].type 05 \
+    --patch rep ffff.element[0].2fw.section[3].load_address ff ff ff ff \
     --patch rep ffff.element[0].2fw.section[4].type fe \
     --patch copy ffff[1] ffff[0] 4096
 -t FB-22 -p "Boot failed (status 8200002b" \
     --patch rep ffff.element[0].2fw.section[1].type 10 \
     --patch copy ffff[1] ffff[0] 4096
--t FB-23 -p "Boot failed (status 8200002b" --patch rep ffff.element[0].2fw.section[1].load_address 00 80 02 \
+-t FB-23 -p "Boot failed (status 8200002b" --patch rep ffff.element[0].2fw.section[1].load_address 20 00 00 10 \
     --patch copy ffff[1] ffff[0] 4096
 -t FB-24 -p "Boot failed (status 82000027" --patch rep ffff.element[0].2fw.ara_vendor_id a6 a6 a6 a6 \
     --patch copy ffff[1] ffff[0] 4096
