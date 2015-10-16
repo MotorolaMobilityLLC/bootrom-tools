@@ -32,7 +32,7 @@
 # Usage:
 #    make3 {-es2tsb | -es3tsb | -fpgatsb } {-sign} {-v} {-dbg} \
 #          {-nocrypto} {-gearchange} {-nodelay} {-debugmsg} {-handshake} \
-#          {-stby} {-stby-wait-svr} {-stby-gbboot}  {-342}
+#          {-stby} {-stby-wait-svr} {-stby-gbboot}  {-342} --rev=<revision>
 #
 #    -es2tsb, -es3tsb, -fpgatsb
 #              Select the build target
@@ -48,6 +48,7 @@
 #    -debugmsg		Allow debug serial output
 #    -handshake		GPIO handshake with simulation/test controller
 #    -342		Substitute the L3FW for L2FW to speed simulation
+#    --rev=<revision>    The revision in git to build the boot ROM code
 #------------------------------------------------------------------------------
 
 # Make the s3FW, s2FW and the FFFF

@@ -32,7 +32,7 @@
 #
 # Usage:
 #    make3sim {-es2tsb | -es3tsb | -fpgatsb } {-sign} {-v} {-prod}\
-#             {-gearchange} {-342}
+#             {-gearchange} {-342} --rev=<revision>
 #
 #    -v        Verbose mode on TFTF creation
 #    -prod     Enable _PRODUCTION mode for all 3 firmware levels
@@ -44,6 +44,7 @@
 #    -gearchange	Test for changing UniPro gear change
 #    -spec <num>	Compile special test number `<num>`.
 #    -342		Substitute the L3FW for L2FW to speed simulation
+#    --rev=<revision>    The revision in git to build the boot ROM code
 #------------------------------------------------------------------------------
 
 #-----
@@ -51,6 +52,7 @@
 #-----
 SpecialTest=false
 HaveSpecialTest=false
+REV=
 for arg in "$@" ; do    # arg will be each positional parameter
     if $SpecialTest; then
         # The previous arg was "-spec", so pick up the special test no.
@@ -80,11 +82,19 @@ for arg in "$@" ; do    # arg will be each positional parameter
     elif [[ ${arg} == "-gearchange" ]]; then
         # Test for changing UniPro gear change
         GearChangeTest=${arg}
+    elif [[ ${arg} == --rev=* ]]; then
+        REV="${arg}"
     else
         echo "make3sim: unknown arg $arg"
         exit 1
     fi
 done
+
+if [ "${REV}" == "" ]; then
+    echo "You have to specify a revision to build the boot ROM code"
+    echo "Usage: $(basename $0) --rev=<revision> [-v]"
+    exit 1
+fi
 
 # Fill in missing chip
 if [ ! $CONFIG_CHIP ]; then
@@ -95,10 +105,10 @@ fi
 if $HaveSpecialTest; then
     make3 -$CONFIG_CHIP -nocrypto -nodelay -debugmsg -handshake \
           -stby -stby-wait-svr -stby-gbboot $GearChangeTest $Sign \
-          $DbgMode $Production $Subst342 -spec $SpecialTestNum
+          $DbgMode $Production $Subst342 -spec $SpecialTestNum $REV
 else
     make3 -$CONFIG_CHIP -nocrypto -nodelay -debugmsg -handshake \
           -stby -stby-wait-svr -stby-gbboot $GearChangeTest $Sign \
-          $DbgMode $Production $Subst342
+          $DbgMode $Production $Subst342 $REV
 fi
 

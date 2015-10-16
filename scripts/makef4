@@ -31,8 +31,8 @@
 #
 # Usage:
 #    makef4 {-es2tsb | -es3tsb | -fpgatsb } {-sign} {-v} {-dbg} \
-#          {-nocrypto} {-gearchange} {-nodelay} {-debugmsg} {-handshake} \
-#          {-stby} {-stby-wait-svr} {-stby-gbboot} {-spec <num>} {-342}
+#           {-nocrypto} {-gearchange} {-nodelay} {-debugmsg} {-handshake} \
+#           {-stby} {-stby-wait-svr} {-stby-gbboot} {-spec <num>} {-342} \
 #
 #    -es2tsb, -es3tsb, -fpgatsb
 #              Select the build target
@@ -79,6 +79,7 @@ CryptoSuffix="-crypto"
 DbgSuffix="-quiet"
 HandshakeSuffix=""
 DbgModeSuffix="opt"
+REV=
 for arg in "$@" ; do    # arg will be each positional parameter
     if $SpecialTest; then
         # The previous arg was "-spec", so pick up the special test no.
@@ -141,6 +142,10 @@ for arg in "$@" ; do    # arg will be each positional parameter
     elif [[ ${arg} == "-342" ]]; then
         # Substitute the L3FW for L2FW to speed simulation
         Subst342=true
+    elif [[ ${arg} == --rev=* ]]; then
+        # --rev is not used for the FFFF, just quietly absorb it so that we
+        # don't squawk if passed in by a script passing $*
+        REV="${arg}"
     else
         echo "makef4: unknown arg $arg"
         exit 1
