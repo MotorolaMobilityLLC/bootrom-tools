@@ -269,6 +269,35 @@ if ! $JustBootrom; then
         popd
         exit 1
     fi
+
+    # Build untrusted (non-signed) FFFF
+    echo "--"
+    echo "Building the Untrusted (non-signed) image for standby test"
+    echo "--"
+    makef4 $F4Args -stby -stby-wait-svr -stby-gbboot
+    if [[ $? == 0 ]]; then
+        mv $BinDir/ffff.bin $AssyDir/ffff/ffff.standby.bin
+        mv $BinDir/ffff.map $AssyDir/ffff/ffff.standby.map
+    else
+        echo "Problems building unsigned FFFF"
+        popd
+        exit 1
+    fi
+
+    # Build trusted (signed) FFFF
+    echo "--"
+    echo "Building the Trusted (signed) image for standby test"
+    echo "--"
+    makef4 $F4Args -sign -stby -stby-wait-svr -stby-gbboot
+    if [[ $? == 0 ]]; then
+        mv $BinDir/ffff-sgn.bin $AssyDir/ffff/ffff-sgn.standby.bin
+        mv $BinDir/ffff-sgn.map $AssyDir/ffff/ffff-sng.standby.map
+    else
+        echo "Problems building signed FFFF"
+        popd
+        exit 1
+    fi
+
 fi
 
 

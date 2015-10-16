@@ -71,7 +71,8 @@ if $GearChangeTest; then
     export _GEAR_CHANGE_TEST=1
 fi
 
-
+export _TESTING=1
+export _GBBOOT_SERVER_STANDBY=1
 
 #-----
 # Make the APBridge/server

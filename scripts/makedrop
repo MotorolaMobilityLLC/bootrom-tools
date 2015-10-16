@@ -73,7 +73,7 @@ if [ "${REV}" == "" ]; then
     exit 1
 fi
 
-StdSim="-nodelay -stby -stby-wait-svr -stby-gbboot"
+StdSim="-nodelay"
 
 #-----
 # Establish the argument lists for the various configurations
