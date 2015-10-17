@@ -1,0 +1,141 @@
+#! /usr/bin/env python
+
+#
+# Copyright (c) 2015 Google Inc.
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+# 1. Redistributions of source code must retain the above copyright notice,
+# this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+# this list of conditions and the following disclaimer in the documentation
+# and/or other materials provided with the distribution.
+# 3. Neither the name of the copyright holder nor the names of its
+# contributors may be used to endorse or promote products derived from this
+# software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+# THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+# OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+# WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+# ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+
+## Tool to split the combined debug and DME logging streams into to outputs
+#
+
+from __future__ import print_function
+import os
+import sys
+import argparse
+
+# Program return values
+PROGRAM_SUCCESS = 0
+PROGRAM_WARNINGS = 1
+PROGRAM_ERRORS = 2
+
+
+def load_file(filename):
+    """ Load a file into a list
+
+    If a filename is specified, it will load it from that file.
+    If no filename is specified, it will load it from stdin.
+
+    Returns a list of the lines in the file
+    """
+    if filename:
+        with open(filename, "r") as f:
+            return f.readlines()
+    else:
+        return sys.stdin.readlines()
+
+
+def split_log(logfile, write_to_files):
+    """ Split the log into 2 separate streams
+
+    Takes a logfile (via the --log parameter), or uses stdin if no logfile
+    specified, and splits it into a debug and dme streams.
+
+    If write_to_files is specified, then it will write the dme stream to
+    <logfile>-dme.rsp and the debug stream to <logfile>.rsp.  If logfile
+    wasn't specified, it uses "log" as the base name. If write_to_files is
+    not specified, then the debug stream goes out on stdout and the dme
+    stream goes out on stderr.
+
+    Thus, one can use it as a filter or as a file processor.
+    """
+    # Read the log file/stream into a list
+    log = load_file(logfile)
+
+    if write_to_files:
+        # Filter the list to <log>.rsp (dbg) and <log>-dme.rsp (dme)
+        # It will use "log" for <log> if there is no input file.
+        if not logfile:
+            logfile = "log"
+
+        root, ext = os.path.splitext(logfile)
+        dme_file = root + "-dme.rsp"
+        dbg_file = root + ".rsp"
+        with open(dbg_file, "w") as dbg:
+            with open(dme_file, "w") as dme:
+                for log_line in log:
+                    log_line = log_line.rstrip()
+                    if log_line[0:3].lower() == "id=":
+                        print(log_line, file=dme)
+                    else:
+                        print(log_line, file=dbg)
+    else:
+        # Filter the list to stdout (dbg) and stderr (dme)
+        for log_line in log:
+            log_line = log_line.rstrip()
+            if log_line[0:3].lower() == "id=":
+                print(log_line, file=sys.stderr)
+            else:
+                print(log_line)
+
+
+def main():
+    """ Tool to split the combined debug and DME logging streams
+
+    Usage:
+      - As a filter:
+            dmefilter < capture.txt > foo 2> bar
+            <debug_capture> | dmefilter > foo 2> bar
+        Process the input on stdin, with debug output going to stdout and
+        DME output going to stderr.
+      - As a file processor:
+            dmefilter --log capture.txt -out
+        Process the log file, with debug output written to <log>.rsp and
+        DME output written to <log>-dme.rsp
+
+    The input selection (file/stdin) is independant of the --out option. If
+    --out is specified with stdin, then the generated files are log.rsp and
+    log-dme.rsp.
+    """
+    parser = argparse.ArgumentParser()
+
+    # Capture-specific args:
+    parser.add_argument("--log",
+                        help="The name of the log file")
+
+    parser.add_argument("--out",
+                        action='store_true',
+                        help="Store the results in <log>-dbg.rsp and "
+                             "<log>-dme.rsp")
+
+    args = parser.parse_args()
+    split_log(args.log, args.out)
+    sys.exit(PROGRAM_SUCCESS)
+
+
+## Launch main
+#
+if __name__ == '__main__':
+    main()
