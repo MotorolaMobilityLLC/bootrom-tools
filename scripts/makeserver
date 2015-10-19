@@ -55,7 +55,7 @@ for arg in "$@" ; do    # arg will be each positional parameter
         Production=true
     elif [[ ${arg} == "-gearchange" ]]; then
         # Test for changing UniPro gear change
-        GearChangeTest="${arg} "
+        export _GEAR_CHANGE_TEST=1
     else
         echo "unknown arg $arg"
         exit 1
@@ -67,9 +67,6 @@ $BuildRoot/configure ${CONFIG_CHIP}
 
 # Export the various settings so that makefile will see them
 export BUILD_FOR_GBBOOT_SERVER=1
-if $GearChangeTest; then
-    export _GEAR_CHANGE_TEST=1
-fi
 
 export _TESTING=1
 export _GBBOOT_SERVER_STANDBY=1
