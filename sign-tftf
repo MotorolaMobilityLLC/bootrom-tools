@@ -32,8 +32,6 @@ from __future__ import print_function
 import sys
 import os
 import argparse
-from string import rfind
-from stat import S_ISREG
 from struct import pack_into
 from tftf import Tftf, error, TFTF_SECTION_TYPE_SIGNATURE
 import M2Crypto
@@ -74,15 +72,14 @@ def get_key_filename(filename):
 
     # Check for the file, and if that fails, try appending the
     # extension.
-    names = (filename, filename + ".pem")
+    filename = os.path.expanduser(filename)
+    filename = os.path.expandvars(filename)
+    filename = os.path.normpath(filename)
+    filename = os.path.abspath(filename)
+    names = (filename, filename + ".pem", filename + "private.pem")
     for name in names:
-        try:
-            mode = os.stat(name).st_mode
-            if S_ISREG(mode):
-                return name
-        except:
-            # stat throws an exception for missing files.
-            continue
+        if os.path.isfile(name):
+            return name
 
     # Can't find the file in any of its variations
     return None
@@ -91,12 +88,14 @@ def get_key_filename(filename):
 def get_key_name(key_filename, key_type):
     # Derive the name of the key from the key's filename
 
-    offset = rfind(key_filename, ".")
-    if offset != -1:
-        key_name = key_filename[0:offset]
-    else:
-        key_name = key_filename
-    key_name += "@" + key_type + ".projectara.com"
+    # Strip off any leading path information and any trailing
+    # ".private.pem" or ".pem"
+    head, tail = os.path.split(key_filename)
+    root, ext = os.path.splitext(tail)
+    if root.endswith("private"):
+        root, ext = os.path.splitext(root)
+
+    key_name = root + "@" + key_type + ".projectara.com"
     return key_name
 
 
@@ -137,7 +136,7 @@ def main():
 
     # String/file args
     parser.add_argument("--key",
-                        help="The name of an input PEK file")
+                        help="The name of an input PEM file")
 
     parser.add_argument("--type",
                         help="The type of the key file")
