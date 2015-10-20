@@ -9,7 +9,7 @@ Initial Conditions:
   MPHY Connection:	2-lane	# No UniPro link active
 
 Operations:
-  Assert GPIO20
+  Clear BootRet_o
   De-assert GPIO3,4,5,23
   Power ON Server Bridge
   Release RESET on Server Bridge
@@ -19,7 +19,7 @@ Operations:
   Bridge Handshake
   wait until PWROFF_N == 0
   wait 2ms
-  De-assert GPIO20
+  Set BootRet_o
   assert GPIO_3
   wait 40us
   deassert GPIO_3
