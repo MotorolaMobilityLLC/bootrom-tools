@@ -30,14 +30,17 @@
 
 from __future__ import print_function
 import sys
-import os
 import argparse
 from struct import pack_into
 from tftf import Tftf, error, TFTF_SECTION_TYPE_SIGNATURE
 import M2Crypto
-from signature_block import SignatureBlock, get_key_type, \
-    TFTF_SIGNATURE_LEN_FIXED_PART, TFTF_SIGNATURE_TYPE_RSA_2048_SHA_256, \
+from signature_block import SignatureBlock, TFTF_SIGNATURE_LEN_FIXED_PART, \
     TFTF_SIGNATURE_OFF_TYPE, TFTF_SIGNATURE_OFF_KEY_NAME
+from signature_common import get_key_filename, get_signature_algorithm, \
+    get_key_type, get_format_type, format_key_name, \
+    TFTF_SIGNATURE_ALGORITHM_RSA_2048_SHA_256, SIGNATURE_COMMON_ARGUMENTS
+
+passphrase = None
 
 
 # Program return values
@@ -46,77 +49,14 @@ PROGRAM_WARNINGS = 1
 PROGRAM_ERRORS = 2
 
 
-def validate_args(args):
-    # Sanity-check the command line args and return a "valid" flag
-
-    if len(args.files) == 0:
-        error("Missing the TFTF file to sign")
-        return False
-    if len(args.files) > 1:
-        error("Too many TFTF files to sign")
-        return False
-
-    num_key_params = 0
-    if args.key:
-        num_key_params += 1
-    if args.testkey:
-        num_key_params += 1
-    if args.realkey:
-        num_key_params += 1
-    if num_key_params < 1:
-        error("No key file specified, use -tk, -rk, or -key")
-        return False
-    elif num_key_params > 1:
-        error("Too many key file types, use only 1 of -tk, -rk, or -key")
-        return False
-
-    if not args.type:
-        error("No key type specified")
-        return False
-
-    return True
-
-
-def get_key_filename(filename):
-    # Add in any missing extension to the filename
-
-    # Check for the file, and if that fails, try appending the
-    # extension.
-    filename = os.path.expanduser(filename)
-    filename = os.path.expandvars(filename)
-    filename = os.path.normpath(filename)
-    filename = os.path.abspath(filename)
-    names = (filename, filename + ".pem", filename + "private.pem")
-    for name in names:
-        if os.path.isfile(name):
-            return name
-
-    # Can't find the file in any of its variations
-    return None
-
-
-def get_key_name(key_filename, key_type):
-    # Derive the name of the key from the key's filename
-
-    # Strip off any leading path information and any trailing
-    # ".private.pem" or ".pem"
-    head, tail = os.path.split(key_filename)
-    root, ext = os.path.splitext(tail)
-    if root.endswith("private"):
-        root, ext = os.path.splitext(root)
-
-    key_name = root + "@" + key_type + ".projectara.com"
-    return key_name
-
-
-def get_hash_from_signature_type(tftf_signature_type):
+def get_hash_from_signature_algorithm(tftf_signature_algorithm):
     # Obtain the hash type from the signature type.
     #
     # Returns a string, suitable for Crypto.RSA.RSA.sign, identifying
     # the hash algorithm to use. This makes the hash usage consistent
     # with the supplied signature type.
 
-    if tftf_signature_type == TFTF_SIGNATURE_TYPE_RSA_2048_SHA_256:
+    if tftf_signature_algorithm == TFTF_SIGNATURE_ALGORITHM_RSA_2048_SHA_256:
         return "sha256"
     else:
         return None
@@ -133,34 +73,51 @@ def get_signable_blob(tftf):
                  tftf.get_section_data_up_to_section(index))
 
 
+def validate_args(args):
+    # Sanity-check the command line args and return a "valid" flag
+
+    if len(args.files) == 0:
+        error("Missing the TFTF file to sign")
+        return False
+    if len(args.files) > 1:
+        error("Too many TFTF files to sign")
+        return False
+
+    if not get_format_type(args.format):
+        error("Unknown --format: '{0:s}' - must be standard | es3".
+              format(args.type))
+        return False
+
+    return True
+
+
+def passphrase_callback(v, prompt1='Enter passphrase:',
+                        prompt2='Verify passphrase:'):
+    """ Provide the passphrase to the M2Crypto routine """
+    global passphrase
+    return passphrase
+
+
 def main():
     """Mainline"""
 
-    global tftf_signature_types
+    global tftf_signature_algorithms, passphrase
     parser = argparse.ArgumentParser()
 
-    # Flags args
+    # Common args (--type, --suffix, --signature-algorithm, --format):
+    for args, kwargs in SIGNATURE_COMMON_ARGUMENTS:
+        parser.add_argument(*args, **kwargs)
+
+    # App-specific args:
+    parser.add_argument("--key",
+                        required=True,
+                        help="The name of input PEM file")
+
     parser.add_argument("--verbose", "-v",
                         action='store_true',
                         help="Display the signed TFTF header when done")
 
-    parser.add_argument("--testkey", "-tk",
-                        action='store_true',
-                        help="Sign using the official test key")
-
-    parser.add_argument("--realkey", "-rk",
-                        action='store_true',
-                        help="Sign using the official production key")
-
-
-    # String/file args
-    parser.add_argument("--key",
-                        help="The name of an input PEM file")
-
-    parser.add_argument("--type",
-                        help="The type of the key file")
-
-    # Remaining args
+    # List of files to be signed with the one key
     parser.add_argument("files",
                         metavar='N',
                         nargs='+',
@@ -173,25 +130,29 @@ def main():
         error("Invalid args")
         sys.exit(PROGRAM_ERRORS)
 
-    # Convert the key type string into a known key type token
+    if args.passphrase:
+        passphrase = args.passphrase
+
+    # Convert the key and signature type strings into tokens
+    signature_algorithm = get_signature_algorithm(args.signature_algorithm)
     key_type = get_key_type(args.type)
-    if key_type:
-        hash_algorithm = get_hash_from_signature_type(key_type)
-        if None == hash_algorithm:
-            error("Unknown hash algorithm")
-            sys.exit(PROGRAM_ERRORS)
-    else:
-        error("'{0:s}' is not supported".format(args.type))
+    key_format = get_format_type(args.format)
+    hash_algorithm = get_hash_from_signature_algorithm(key_type)
+    if not hash_algorithm:
+        error("Unknown hash algorithm")
         sys.exit(PROGRAM_ERRORS)
 
     # Read the key
-    key_filename = get_key_filename(args.key)
+    key_filename = get_key_filename(args.key, True)
     if not key_filename:
         error("Can't find key file '{0:s}'".format(args.key))
         sys.exit(PROGRAM_ERRORS)
     else:
         try:
-            key = M2Crypto.RSA.load_key(key_filename)
+            if args.passphrase:
+                key = M2Crypto.RSA.load_key(key_filename, passphrase_callback)
+            else:
+                key = M2Crypto.RSA.load_key(key_filename)
         except:
             error("Can't load key", key_filename)
             sys.exit(PROGRAM_ERRORS)
@@ -202,14 +163,13 @@ def main():
     # proper, set the length and append the section to the TFTF file.
     base_signature_block = bytearray(TFTF_SIGNATURE_LEN_FIXED_PART)
 
-    signature_type = TFTF_SIGNATURE_TYPE_RSA_2048_SHA_256
-
     # Fill in the signature block type
     pack_into("<L", base_signature_block, TFTF_SIGNATURE_OFF_TYPE,
-              signature_type)
+              signature_algorithm)
 
     # Derive a key name from the key file and add it to the signature block
-    key_name = get_key_name(key_filename, args.type)
+    key_name = format_key_name(key_format, key_filename, key_type,
+                               signature_algorithm, args.suffix)
     pack_into("<96s", base_signature_block, TFTF_SIGNATURE_OFF_KEY_NAME,
               key_name)
 
@@ -225,7 +185,7 @@ def main():
         signature = key.sign(MsgDigest.digest(), hash_algorithm)
 
         # Append the signature block to the TFTF
-        signature_block = SignatureBlock(None, signature_type, key_name,
+        signature_block = SignatureBlock(None, signature_algorithm, key_name,
                                          signature)
         if not tftf.add_section(TFTF_SECTION_TYPE_SIGNATURE,  # type
                                 0,                            # class

@@ -33,8 +33,10 @@ import sys
 import os
 import argparse
 import subprocess
-from stat import S_ISREG
 from util import error
+from signature_common import get_signature_algorithm, \
+    get_key_type,  get_format_type, format_key_name, \
+    get_key_filename, SIGNATURE_COMMON_ARGUMENTS
 
 MAX_FILES = 4
 
@@ -96,19 +98,11 @@ KEY_ARRAY = "const crypto_public_key {0:s}[] = {1:s}\n"
 # NOTE: When adding new types, both the "define" and the dictionary
 # need to be updated.
 TFTF_SIGNATURE_TYPE_UNKNOWN = 0x00
-TFTF_SIGNATURE_TYPE_RSA_2048_SHA_256 = 0x01
+TFTF_SIGNATURE_ALGORITHM_RSA_2048_SHA_256 = 0x01
 tftf_signature_types = {"rsa2048-sha256":
-                        TFTF_SIGNATURE_TYPE_RSA_2048_SHA_256}
-tftf_signature_names = {TFTF_SIGNATURE_TYPE_RSA_2048_SHA_256:
+                        TFTF_SIGNATURE_ALGORITHM_RSA_2048_SHA_256}
+tftf_signature_names = {TFTF_SIGNATURE_ALGORITHM_RSA_2048_SHA_256:
                         "ALGORITHM_TYPE_RSA2048_SHA256"}
-
-
-def get_key_type(key_type_string):
-    """convert a string into a key_type
-
-    returns a numeric key_type, or None if invalid
-    """
-    return tftf_signature_types[key_type_string]
 
 
 def get_key_define(key_type):
@@ -118,30 +112,11 @@ def get_key_define(key_type):
         return "INVALID"
 
 
-def get_key_filename(filename):
-    # Add in any missing extension to the filename
-
-    # Check for the file, and if that fails, try appending the
-    # extension.
-    names = (filename, filename + ".pem")
-    for name in names:
-        try:
-            mode = os.stat(name).st_mode
-            if S_ISREG(mode):
-                return name
-        except:
-            # stat throws an exception for missing files.
-            continue
-
-    # Can't find the file in any of its variations
-    return None
-
-
 def validate_input_files(keyfiles):
     # Validate the list of key file names
     success = True
     for i, f in enumerate(keyfiles):
-        pathname = get_key_filename(f)
+        pathname = get_key_filename(f, False)
         if not pathname:
             print("Can't find", f)
             success = False
@@ -151,23 +126,8 @@ def validate_input_files(keyfiles):
     return success
 
 
-def get_key_name_root(keyfile):
-    # Extract a key name root from the pathname by discarding all path
-    # and extensions from the pathname.
-
-    # Trim off any leading path
-    index = max(keyfile.rfind("/") + 1, 0)
-    keyfile = keyfile[index:]
-
-    # Trim off all extensions
-    index = keyfile.find(".")
-    if index > 0:
-        return keyfile[:index]
-    else:
-        return keyfile
-
-
-def convert_pem_to_array(keyfile, wf, usage, key_type, indent, include_braces):
+def convert_pem_to_array(keyfile, wf, usage, key_format, key_type, algorithm,
+                         suffix, indent, include_braces):
     # Convert a public key file into a C-style array appended to the ouput
     # file
 
@@ -178,7 +138,8 @@ def convert_pem_to_array(keyfile, wf, usage, key_type, indent, include_braces):
 
     # Generate the key_name from the file and verify that it will fit
     # in the 96-byte field as a null-terminated string
-    key_name = get_key_name_root(keyfile) + "@" + usage
+    key_name = format_key_name(key_format, os.path.basename(keyfile),
+                               key_type, algorithm, suffix)
     if (len(key_name) >= MAX_KEY_NAME_LENGTH):
         error("Key name too long: '{0:s}'".format(key_name))
         error("Key name must be <", MAX_KEY_NAME_LENGTH, "characters")
@@ -218,7 +179,8 @@ def convert_pem_to_array(keyfile, wf, usage, key_type, indent, include_braces):
         wf.write("{0:s}{1:s},\n".format(indent, "}"))
 
 
-def process_input_files(keyfiles, wf, array_name, key_type, usage, singleton):
+def process_input_files(keyfiles, wf, array_name, key_format, key_type,
+                        signature_algorithm, suffix, usage, singleton):
     # Convert each of the public key files into a C array in a header file
         # Add the boilerplate copyright and #includes
         wf.write(COPYRIGHT)
@@ -232,7 +194,8 @@ def process_input_files(keyfiles, wf, array_name, key_type, usage, singleton):
 
             # Process each file as a component of the array
             for f in keyfiles:
-                convert_pem_to_array(f, wf, usage, key_type, "", False)
+                convert_pem_to_array(f, wf, usage, key_format, key_type,
+                                     signature_algorithm, suffix, "", False)
 
             # Complete the declaration
             wf.write("};\n\n")
@@ -242,7 +205,8 @@ def process_input_files(keyfiles, wf, array_name, key_type, usage, singleton):
 
             # Process each file as a component of the array
             for f in keyfiles:
-                convert_pem_to_array(f, wf, usage, key_type, "    ", True)
+                convert_pem_to_array(f, wf, usage, key_format, key_type,
+                                     signature_algorithm, suffix, "    ", True)
 
             # Complete the 2D array declaration
             wf.write("};\n\n")
@@ -259,10 +223,15 @@ def main():
     # Parse the command line args
     parser = argparse.ArgumentParser(usage=USAGE)
 
+    # Common args (--type, --suffix, --signature-algorithm, --format):
+    for args, kwargs in SIGNATURE_COMMON_ARGUMENTS:
+        parser.add_argument(*args, **kwargs)
+
+    # App-specific args:
     parser.add_argument("keyfiles", metavar="N", nargs="*",
                         help="One or more public key files (e.g., foo.pem)")
-    parser.add_argument("--format", required=True,
-                        help="Specifies the format (e.g., rsa2048-sha256)")
+#    parser.add_argument("--format", required=True,
+#                        help="Specifies the format (e.g., rsa2048-sha256)")
     parser.add_argument("--usage", required=True,
                         help="The right half of the key name(s)")
     parser.add_argument("--name", required=False, default="public_keys",
@@ -274,10 +243,9 @@ def main():
     args = parser.parse_args()
 
     # Validate parameters
-    key_type = get_key_type(args.format)
-    if (not key_type):
-        error("unknown --format")
-        sys.exit(1)
+    signature_algorithm = get_signature_algorithm(args.signature_algorithm)
+    key_type = get_key_type(args.type)
+    key_format = get_format_type(args.format)
 
     if args.singleton and (len(args.keyfiles) > 1):
         error("--singleton specified with multiple files")
@@ -285,8 +253,9 @@ def main():
 
     # Create the file on stdout
     if validate_input_files(args.keyfiles):
-        process_input_files(args.keyfiles, sys.stdout, args.name, key_type,
-                            args.usage, args.singleton)
+        process_input_files(args.keyfiles, sys.stdout, args.name,
+                            key_format, key_type, signature_algorithm,
+                            args.suffix, args.usage, args.singleton)
 
 ## Launch main
 #

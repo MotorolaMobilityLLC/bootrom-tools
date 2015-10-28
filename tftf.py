@@ -35,6 +35,7 @@ from string import rfind
 from time import gmtime, strftime
 from util import display_binary_data, error
 from signature_block import signature_block_write_map
+from signature_common import TFTF_SIGNATURE_ALGORITHM_RSA_2048_SHA_256
 
 # TFTF section types
 TFTF_SECTION_TYPE_RESERVED = 0x00
@@ -189,9 +190,9 @@ TFTF_SIGNATURE_OFF_KEY_SIGNATURE = (TFTF_SIGNATURE_OFF_KEY_NAME +
 # NOTE: When adding new types, both the "define" and the dictionary
 # need to be updated.
 TFTF_SIGNATURE_TYPE_UNKNOWN = 0x00
-TFTF_SIGNATURE_TYPE_RSA_2048_SHA_256 = 0x01
-tftf_signature_types = {"rsa2048-sha256": TFTF_SIGNATURE_TYPE_RSA_2048_SHA_256}
-tftf_signature_names = {TFTF_SIGNATURE_TYPE_RSA_2048_SHA_256: "rsa2048-sha256"}
+TFTF_SIGNATURE_ALGORITHM_RSA_2048_SHA_256 = 0x01
+tftf_signature_types = {"rsa2048-sha256": TFTF_SIGNATURE_ALGORITHM_RSA_2048_SHA_256}
+tftf_signature_names = {TFTF_SIGNATURE_ALGORITHM_RSA_2048_SHA_256: "rsa2048-sha256"}
 
 TFTF_FILE_EXTENSION = ".bin"
 

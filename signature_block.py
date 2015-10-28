@@ -31,6 +31,8 @@
 from __future__ import print_function
 from struct import pack_into, unpack_from
 from util import display_binary_data, error
+from signature_common import get_signature_algorithm_name, \
+    TFTF_SIGNATURE_TYPE_UNKNOWN
 
 # TFTF Signature Block layout
 TFTF_SIGNATURE_KEY_NAME_LENGTH = 96
@@ -40,16 +42,6 @@ TFTF_SIGNATURE_OFF_KEY_NAME = 0x08
 TFTF_SIGNATURE_OFF_KEY_SIGNATURE = 0x68
 # Size of the fixed portion of the signature block
 TFTF_SIGNATURE_LEN_FIXED_PART = TFTF_SIGNATURE_OFF_KEY_SIGNATURE
-
-# TFTF Signature Types and associated dictionary of types and names
-# NOTE: When adding new types, both the "define" and the dictionary
-# need to be updated.
-TFTF_SIGNATURE_TYPE_UNKNOWN = 0x00
-TFTF_SIGNATURE_TYPE_RSA_2048_SHA_256 = 0x01
-tftf_signature_types = {"rsa2048-sha256":
-                        TFTF_SIGNATURE_TYPE_RSA_2048_SHA_256}
-tftf_signature_names = {TFTF_SIGNATURE_TYPE_RSA_2048_SHA_256:
-                        "rsa2048-sha256"}
 
 
 def signature_block_write_map(wf, base_offset, prefix=""):
@@ -69,15 +61,6 @@ def signature_block_write_map(wf, base_offset, prefix=""):
              format(prefix, base_offset + TFTF_SIGNATURE_OFF_KEY_NAME))
     wf.write("{0:s}key_signature  {1:08x}\n".
              format(prefix, base_offset + TFTF_SIGNATURE_OFF_KEY_SIGNATURE))
-
-
-def get_key_type(key_type_string):
-    """convert a string into a key_type
-
-    returns a numeric key_type, or None if invalid
-    """
-
-    return tftf_signature_types[key_type_string]
 
 
 class SignatureBlock:
@@ -131,11 +114,7 @@ class SignatureBlock:
     def display(self, indent=""):
         """Display the signature block"""
 
-        try:
-            signature_name = tftf_signature_names[self.signature_type]
-        except:
-            signature_name = "INVALID"
-
+        signature_name = get_signature_algorithm_name(self.signature_type)
         print("{0:s}    Length:    {1:08x}".format(indent, self.length))
         print("{0:s}    Sig. type: {1:d} ({2:s})".format(
             indent, self.signature_type, signature_name))
