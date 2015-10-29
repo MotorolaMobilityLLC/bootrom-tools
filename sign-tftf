@@ -40,8 +40,6 @@ from signature_common import get_key_filename, get_signature_algorithm, \
     get_key_type, get_format_type, format_key_name, \
     TFTF_SIGNATURE_ALGORITHM_RSA_2048_SHA_256, SIGNATURE_COMMON_ARGUMENTS
 
-passphrase = None
-
 
 # Program return values
 PROGRAM_SUCCESS = 0
@@ -91,17 +89,10 @@ def validate_args(args):
     return True
 
 
-def passphrase_callback(v, prompt1='Enter passphrase:',
-                        prompt2='Verify passphrase:'):
-    """ Provide the passphrase to the M2Crypto routine """
-    global passphrase
-    return passphrase
-
-
 def main():
     """Mainline"""
 
-    global tftf_signature_algorithms, passphrase
+    global tftf_signature_algorithms
     parser = argparse.ArgumentParser()
 
     # Common args (--type, --suffix, --signature-algorithm, --format):
@@ -130,9 +121,6 @@ def main():
         error("Invalid args")
         sys.exit(PROGRAM_ERRORS)
 
-    if args.passphrase:
-        passphrase = args.passphrase
-
     # Convert the key and signature type strings into tokens
     signature_algorithm = get_signature_algorithm(args.signature_algorithm)
     key_type = get_key_type(args.type)
@@ -149,10 +137,7 @@ def main():
         sys.exit(PROGRAM_ERRORS)
     else:
         try:
-            if args.passphrase:
-                key = M2Crypto.RSA.load_key(key_filename, passphrase_callback)
-            else:
-                key = M2Crypto.RSA.load_key(key_filename)
+            key = M2Crypto.RSA.load_key(key_filename)
         except:
             error("Can't load key", key_filename)
             sys.exit(PROGRAM_ERRORS)

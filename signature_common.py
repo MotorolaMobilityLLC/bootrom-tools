@@ -61,18 +61,16 @@ FORMAT_NAMES = {FORMAT_TYPE_STANDARD: "standard",
 
 # Common command-line arguments for signing apps
 SIGNATURE_COMMON_ARGUMENTS = [
-    (["--passphrase"], {"required": False,
-                        "help": "The key passphrase"}),
     (["--type"], {"required": True,
                   "help": "The type of the key file (e.g., s2fsk)"}),
     (["--suffix"], {"default": "keys.projectara.com",
                     "help": "The right hand part of the key name "
-                    "(keys.projecatar.com)"}),
+                    "(keys.projectara.com)"}),
     (["--signature-algorithm"], {"required": True,
                                  "help": "The name of the signing algorithm "
                                  "(e.g., rsa2048-sha256)"}),
     (["--format"], {"required": True,
-                    "help": "TThe naming format for keys (standard | es3)"})]
+                    "help": "The naming format for keys (standard | es3)"})]
 
 
 def rchop(string, suffix):
