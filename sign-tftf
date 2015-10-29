@@ -32,13 +32,21 @@ from __future__ import print_function
 import sys
 import argparse
 from struct import pack_into
-from tftf import Tftf, error, TFTF_SECTION_TYPE_SIGNATURE
+from tftf import Tftf, TFTF_SECTION_TYPE_SIGNATURE
 import M2Crypto
 from signature_block import SignatureBlock, TFTF_SIGNATURE_LEN_FIXED_PART, \
     TFTF_SIGNATURE_OFF_TYPE, TFTF_SIGNATURE_OFF_KEY_NAME
 from signature_common import get_key_filename, get_signature_algorithm, \
     get_key_type, get_format_type, format_key_name, \
     TFTF_SIGNATURE_ALGORITHM_RSA_2048_SHA_256, SIGNATURE_COMMON_ARGUMENTS
+from util import error, print_to_error
+from getpass import getpass
+
+
+# Global key passphrase is set from the "--passin" command-line arg via
+# process_passin(). It is used by M2Crypto.RSA.load_key() via the
+# get_passphrase() callback
+passphrase = None
 
 
 # Program return values
@@ -89,6 +97,101 @@ def validate_args(args):
     return True
 
 
+def process_passin(passin):
+    """ Handle the various --passin options
+
+    --passin pass:Password - Use the specified Password as a password
+    --passin stdin - Read the password from standard input
+    --passin prompt - Prompt for password (default behaviour)
+
+    The password is stored in the global "passphrase" for the use by
+    get_passphrase. Unknown passin options result in raising a
+    ValueError.
+
+    Note that if called with "pass:" or "stdin", we will only set the
+    passphrase once. This allows us to be called multiple times as part
+    of a get-passphrase/load-key retry mechanism for the "prompt" option
+    only.
+    """
+    global passphrase
+    verify = False     # ***** Hardwired, depending on SW1416 clarification
+    if passin.startswith("pass:"):
+        if not passphrase:
+            passphrase = passin[5:]
+    elif passin == "stdin":
+        if not passphrase:
+            passphrase = sys.stdin.readline().rstrip()
+    elif passin == "prompt":
+        while True:
+            try:
+                passphrase = getpass("Enter passphrase: ")
+                if verify:
+                    p2 = getpass("Verify passphrase: ")
+                    if passphrase == p2:
+                        break
+                    else:
+                        print_to_error("Passphrases don't match")
+                else:
+                    break
+            except KeyboardInterrupt:
+                raise IOError("Cancelled")
+    else:
+        raise ValueError("Unknown --passin option: {0:s}".format(passin))
+
+
+def get_passphrase(verify, prompt1='Enter passphrase:',
+                   prompt2='Verify passphrase:'):
+    """ Provide the passphrase to the M2Crypto routine
+
+    See: http://nullege.com/codes/search/util.passphrase_callback for prototype
+    Returns the passphrase obtained by process_passin.
+    """
+    global passphrase
+    return passphrase
+
+
+def get_key(key_filename, passin, no_retry):
+    """ Read the key, given the private key pathanme and --passin mode
+
+    Returns a valid key if successful, raises various exceptions otherwise
+    """
+    # Read the key
+    if not key_filename or not os.path.isfile(key_filename):
+        raise ValueError("Can't find key file '{0:s}'".format(key_filename))
+    else:
+        # If we're getting the passphrase interatively, repeatedly try to
+        # get the passphrase and the key until successful. It we're not
+        # getting the passphrase interactively, just make one attempt.
+        while True:
+            # Obtain the passphrase for the key
+            try:
+                process_passin(passin)
+            except IOError as e:
+                print_to_error(e)
+                raise
+            except ValueError as e:
+                raise ValueError("Can't load passphrase ({0})".format(e))
+
+            # Try to load the key, using the passphrase. If that fails and
+            # we got the passphrase interactively, try again until they get
+            # it right (or ^C out). NB the --retry flag causes us to skip
+            # retrying
+            try:
+                return M2Crypto.RSA.load_key(key_filename, get_passphrase)
+            except M2Crypto.RSA.RSAError as e:
+                if (passin == "prompt") and no_retry:
+                    raise ValueError("Invalid passphrase for {0}".
+                                     format(os.path.basename(key_filename)))
+                else:
+                    error("Invalid passphrase for {0}".
+                          format(os.path.basename(key_filename)))
+            except:
+                raise IOError("Can't load key {0}".
+                              format(os.path.basename(key_filename)))
+    # We should never get here
+    raise ValueError("Unknown problem in get_key")
+
+
 def main():
     """Mainline"""
 
@@ -107,6 +210,21 @@ def main():
     parser.add_argument("--verbose", "-v",
                         action='store_true',
                         help="Display the signed TFTF header when done")
+
+    parser.add_argument("--passin",
+                        default="prompt",
+                        help="Key file passphrase (stdin | (prompt) | "
+                             "pass:<passphrase>)")
+
+    parser.add_argument("--retry",
+                        action='store_true',
+                        help="Fail if '--passin prompt' passphrase is invalid")
+
+    parser.add_argument("--check",
+                        action='store_true',
+                        help="Check that the parameters are sound, the TFTF "
+                             "exists and the passphrase is correct, but do "
+                             "not modify TFTF")
 
     # List of files to be signed with the one key
     parser.add_argument("files",
@@ -135,12 +253,6 @@ def main():
     if not key_filename:
         error("Can't find key file '{0:s}'".format(args.key))
         sys.exit(PROGRAM_ERRORS)
-    else:
-        try:
-            key = M2Crypto.RSA.load_key(key_filename)
-        except:
-            error("Can't load key", key_filename)
-            sys.exit(PROGRAM_ERRORS)
 
     # Create an initial signature block, sized to the fixed portion, with
     # as much initialized as possible.  We'll use this as the base image
@@ -160,36 +272,39 @@ def main():
 
     # Walk the list of TFTF files
     for f in args.files:
+        # Discard any prior TFTF and load the next one
+        tftf = None
         signature_block = base_signature_block
         tftf = Tftf(0, f)
 
-        # Extract the signable blob from the TFTF and sign it
-        signable_blob = get_signable_blob(tftf)
-        MsgDigest = M2Crypto.EVP.MessageDigest(hash_algorithm)
-        MsgDigest.update(signable_blob)
-        signature = key.sign(MsgDigest.digest(), hash_algorithm)
+        # Process each TFTF, unless "--check" was specified
+        if not args.check:
+            # Extract the signable blob from the TFTF and sign it
+            signable_blob = get_signable_blob(tftf)
+            MsgDigest = M2Crypto.EVP.MessageDigest(hash_algorithm)
+            MsgDigest.update(signable_blob)
+            signature = key.sign(MsgDigest.digest(), hash_algorithm)
 
-        # Append the signature block to the TFTF
-        signature_block = SignatureBlock(None, signature_algorithm, key_name,
-                                         signature)
-        if not tftf.add_section(TFTF_SECTION_TYPE_SIGNATURE,  # type
-                                0,                            # class
-                                0,                            # id
-                                signature_block.pack()):      # data
-            sys.exit(PROGRAM_ERRORS)
+            # Append the signature block to the TFTF
+            signature_block = SignatureBlock(None, signature_type, key_name,
+                                             signature)
+            if not tftf.add_section(TFTF_SECTION_TYPE_SIGNATURE,  # type
+                                    0,                            # class
+                                    0,                            # id
+                                    signature_block.pack()):      # data
+                sys.exit(PROGRAM_ERRORS)
 
-        tftf.post_process()
+            tftf.post_process()
 
-        # Optionally display the header info
-        if args.verbose:
-            tftf.pack()
-            tftf.display(f)
-            tftf.display_data(f)
+            # Optionally display the header info
+            if args.verbose:
+                tftf.pack()
+                tftf.display(f)
+                tftf.display_data(f)
 
-        # Write the TFTF file (i.e., header and section files)
-        if not tftf.write(f):
-            sys.exit(PROGRAM_ERRORS)
-        tftf = None
+            # Write the TFTF file (i.e., header and section files)
+            if not tftf.write(f):
+                sys.exit(PROGRAM_ERRORS)
 
     print("Done")
 
