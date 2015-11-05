@@ -43,9 +43,17 @@ from util import error, print_to_error
 from getpass import getpass
 
 
-# Global key passphrase is set from the "--passin" command-line arg via
-# process_passin(). It is used by M2Crypto.RSA.load_key() via the
-# get_passphrase() callback
+# M2Crypto.RSA.load_key() gets its passphrase only via the get_passphrase()
+# callback. (The API for get_passphrase is under the control of the M2Crypto
+# library, and is intended to prompt the user for the passphrase, optionally
+# prompting them a second time to verify the passphrase.) During real testing,
+# it was found that the total number of prompts for the same passphrase was
+# onerous, sign-tftf was modified to allow the passphrase to be entered once
+# and used multiple times.
+#
+# One can enter the passphrase to sign-tftf via the command line, stdin or
+# a prompt. Because of the passphrase re-use and the multiple vectors for
+# obtaining it, we store it in a global, which get_passphrase returns.
 passphrase = None
 
 
@@ -114,7 +122,6 @@ def process_passin(passin):
     only.
     """
     global passphrase
-    verify = False     # ***** Hardwired, depending on SW1416 clarification
     if passin.startswith("pass:"):
         if not passphrase:
             passphrase = passin[5:]
@@ -125,14 +132,7 @@ def process_passin(passin):
         while True:
             try:
                 passphrase = getpass("Enter passphrase: ")
-                if verify:
-                    p2 = getpass("Verify passphrase: ")
-                    if passphrase == p2:
-                        break
-                    else:
-                        print_to_error("Passphrases don't match")
-                else:
-                    break
+                break
             except KeyboardInterrupt:
                 raise IOError("Cancelled")
     else:
@@ -143,7 +143,13 @@ def get_passphrase(verify, prompt1='Enter passphrase:',
                    prompt2='Verify passphrase:'):
     """ Provide the passphrase to the M2Crypto routine
 
-    See: http://nullege.com/codes/search/util.passphrase_callback for prototype
+    See: http://nullege.com/codes/search/util.passphrase_callback for
+    prototype. API defined by M2Crypto library.
+
+    While it may seem excessive to use a function to return a global variable,
+    the get_passphrase callback is the only means of supplying the passphrase
+    to M2Crypto.RSA.load_key.
+
     Returns the passphrase obtained by process_passin.
     """
     global passphrase
