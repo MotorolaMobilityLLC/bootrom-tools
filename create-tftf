@@ -305,6 +305,11 @@ def main():
                         default=DEFAULT_ARA_PID,
                         help="The ARA product-ID")
 
+    parser.add_argument("--ara-reserved-tftf",
+                        type=auto_int,
+                        default=0,
+                        help="The TFTF version")
+
     parser.add_argument("--ara-stage",
                         type=auto_int,
                         default=DEFAULT_ARA_BOOT_STAGE,
@@ -340,6 +345,7 @@ def main():
     tftf_header.unipro_pid = args.unipro_pid
     tftf_header.ara_vid = args.ara_vid
     tftf_header.ara_pid = args.ara_pid
+    tftf_header.reserved [3] = args.ara_reserved_tftf
     for section in sections:
         if 'file' in section:
             success = tftf_header.add_section_from_file(section['type'],
