@@ -266,7 +266,7 @@ class TftfSection:
     def unpack(self, section_buf, section_offset):
         # Unpack a section header from a TFTF header buffer, and return
         # a flag indicating if the section was a section-end
-        section_hdr = unpack_from("<LLLLL", section_buf, section_offset)
+        section_hdr = unpack_from("<LLLLL", str(section_buf), section_offset)
         type_class = section_hdr[0]
         self.section_type = type_class & 0x000000ff
         self.section_class = (type_class >> 8) & 0x00ffffff
@@ -446,8 +446,9 @@ class Tftf:
             self.header_size - \
             (TFTF_HDR_LEN_FIXED_PART + TFTF_HDR_LEN_SECTION_TABLE)
         TFTF_HDR_NUM_RESERVED = TFTF_HDR_LEN_RESERVED / TFTF_RSVD_SIZE
-        self.reserved = [0] * TFTF_HDR_NUM_RESERVED
 
+        # DO NOT CLEAR RESERVED - IT IS USED FOR TFTF VERSION
+        #self.reserved = [0] * TFTF_HDR_NUM_RESERVED
         # Offsets to fields following the first variable-length table
         # (Reserved)
         TFTF_HDR_OFF_SECTIONS = (TFTF_HDR_OFF_RESERVED +
@@ -500,7 +501,7 @@ class Tftf:
     def unpack(self):
         # Unpack a TFTF header from a buffer
         fmt_string = "<4sL16s48sLLLLLL" + "L" * TFTF_HDR_NUM_RESERVED
-        tftf_hdr = unpack_from(fmt_string, self.tftf_buf)
+        tftf_hdr = unpack_from(fmt_string, str(self.tftf_buf))
         self.sentinel = tftf_hdr[0]
         self.header_size = tftf_hdr[1]
         self.timestamp = tftf_hdr[2]
