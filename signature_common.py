@@ -108,6 +108,7 @@ def format_key_name(key_format, key_filename, key_type,
     key_filename = rchop(key_filename, ".private.pem")
     key_filename = rchop(key_filename, ".public.pem")
     key_filename = rchop(key_filename, ".pem")
+    key_filename = rchop(key_filename, ".x509.crt")
 
     # Generate the key name based on the format
     if key_format == FORMAT_TYPE_STANDARD:

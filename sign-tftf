@@ -271,7 +271,7 @@ def main():
               signature_algorithm)
 
     # Derive a key name from the key file and add it to the signature block
-    key_name = format_key_name(key_format, key_filename, key_type,
+    key_name = format_key_name(key_format, os.path.basename(key_filename), key_type,
                                signature_algorithm, args.suffix)
     pack_into("<96s", base_signature_block, TFTF_SIGNATURE_OFF_KEY_NAME,
               key_name)
