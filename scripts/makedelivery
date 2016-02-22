@@ -94,6 +94,8 @@ cp $BuildDir/bromcGP.bitcount $DropDir
 cp $BuildDir/bromcGP.dat $DropDir
 # NB. Awaiting confirmation on whether or not the hex file needs to be included
 #cp $BuildDir/bootrom.hex $DropDir/bootrom$Ornamentation.hex
+hexdump -v -e '/1 "%02X\n"' $BuildDir/bromcAP.bin > $DropDir/bromcAP.hex
+hexdump -v -e '/1 "%02X\n"' $BuildDir/bromcGP.bin > $DropDir/bromcGP.hex
 
 # Copy the source and tools trees into the drop folder and remove any
 # hidden git or reviewboard files.
