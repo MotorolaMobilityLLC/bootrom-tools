@@ -345,6 +345,7 @@ def main():
     tftf_header.unipro_pid = args.unipro_pid
     tftf_header.ara_vid = args.ara_vid
     tftf_header.ara_pid = args.ara_pid
+    tftf_header.package_type = args.ara_stage
     tftf_header.reserved [3] = args.ara_reserved_tftf
     for section in sections:
         if 'file' in section:
