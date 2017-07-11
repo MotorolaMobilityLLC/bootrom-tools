@@ -42,17 +42,21 @@ MAX_FILES = 4
 
 MAX_KEY_NAME_LENGTH = 96
 
-USAGE = """"%(prog)s  public_key.pem... --format <format> --usage <string> \\
-           {--name <string>} {--singleton}
+USAGE = """"%(prog)s  public_key.pem... --signature-algorithm <string> \
+--format <format> --type <string> --suffix <string> {--name <string>} {--singleton}
 Where:
     public_key.pem
         One or more public key files
-     --usage
-        The right half of the key names (e.g. 's2fvk.projectara.com')
+     --signature-algorithm
+        Signature algorithm to use (e.g. 'rsa2048-sha256')
      --format
-        Specifies the format (e.g., 'rsa2048-sha256')
+        Specifies the format (e.g., 'standard')
+     --type
+        The type of the signature (e.g., 's2fsk')
+     --suffix
+        The right half of the key names (e.g. 'projectara.com')
      --name
-        Name of the 'C' variable containing the keys (default: 'public_keys')
+        Name of the 'C' array or single struct (e.g. public_keys)
      --singleton
         Declare the one key as a struct instead of an array
 """
@@ -126,7 +130,7 @@ def validate_input_files(keyfiles):
     return success
 
 
-def convert_pem_to_array(keyfile, wf, usage, key_format, key_type, algorithm,
+def convert_pem_to_array(keyfile, wf, key_format, key_type, algorithm,
                          suffix, indent, include_braces):
     # Convert a public key file into a C-style array appended to the ouput
     # file
@@ -180,7 +184,7 @@ def convert_pem_to_array(keyfile, wf, usage, key_format, key_type, algorithm,
 
 
 def process_input_files(keyfiles, wf, array_name, key_format, key_type,
-                        signature_algorithm, suffix, usage, singleton):
+                        signature_algorithm, suffix, singleton):
     # Convert each of the public key files into a C array in a header file
         # Add the boilerplate copyright and #includes
         wf.write(COPYRIGHT)
@@ -194,7 +198,7 @@ def process_input_files(keyfiles, wf, array_name, key_format, key_type,
 
             # Process each file as a component of the array
             for f in keyfiles:
-                convert_pem_to_array(f, wf, usage, key_format, key_type,
+                convert_pem_to_array(f, wf, key_format, key_type,
                                      signature_algorithm, suffix, "", False)
 
             # Complete the declaration
@@ -205,7 +209,7 @@ def process_input_files(keyfiles, wf, array_name, key_format, key_type,
 
             # Process each file as a component of the array
             for f in keyfiles:
-                convert_pem_to_array(f, wf, usage, key_format, key_type,
+                convert_pem_to_array(f, wf, key_format, key_type,
                                      signature_algorithm, suffix, "    ", True)
 
             # Complete the 2D array declaration
@@ -230,10 +234,6 @@ def main():
     # App-specific args:
     parser.add_argument("keyfiles", metavar="N", nargs="*",
                         help="One or more public key files (e.g., foo.pem)")
-#    parser.add_argument("--format", required=True,
-#                        help="Specifies the format (e.g., rsa2048-sha256)")
-    parser.add_argument("--usage", required=True,
-                        help="The right half of the key name(s)")
     parser.add_argument("--name", required=False, default="public_keys",
                         help="Name of the 'C' array or single struct")
     parser.add_argument("--singleton", action='store_true',
@@ -255,7 +255,7 @@ def main():
     if validate_input_files(args.keyfiles):
         process_input_files(args.keyfiles, sys.stdout, args.name,
                             key_format, key_type, signature_algorithm,
-                            args.suffix, args.usage, args.singleton)
+                            args.suffix, args.singleton)
 
 ## Launch main
 #
