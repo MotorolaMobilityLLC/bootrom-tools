@@ -41,6 +41,7 @@ from signature_common import get_key_filename, get_signature_algorithm, \
     TFTF_SIGNATURE_ALGORITHM_RSA_2048_SHA_256, SIGNATURE_COMMON_ARGUMENTS
 from util import error, print_to_error
 from getpass import getpass
+import os
 
 
 # M2Crypto.RSA.load_key() gets its passphrase only via the get_passphrase()
@@ -289,10 +290,11 @@ def main():
             signable_blob = get_signable_blob(tftf)
             MsgDigest = M2Crypto.EVP.MessageDigest(hash_algorithm)
             MsgDigest.update(signable_blob)
+            key = get_key(args.key, args.passin, args.retry)
             signature = key.sign(MsgDigest.digest(), hash_algorithm)
 
             # Append the signature block to the TFTF
-            signature_block = SignatureBlock(None, signature_type, key_name,
+            signature_block = SignatureBlock(None, signature_algorithm, key_name,
                                              signature)
             if not tftf.add_section(TFTF_SECTION_TYPE_SIGNATURE,  # type
                                     0,                            # class
